@@ -8,6 +8,7 @@ import {
   halfPipeFootprint,
   type HalfPipeParams,
 } from "./ramps/halfPipe";
+import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
 
 // Quarter-pipe is temporarily out of the UI while the half-pipe gets the space-constraint
 // treatment (stage 1) and structural rendering (stage 2) — src/ramps/quarterPipe.ts is
@@ -42,6 +43,9 @@ interface RampSpec<P> {
   copingXs: (params: P) => number[];
   // Footprint this ramp actually needs, for the available-space validation below.
   footprint: (params: P) => Footprint;
+  // CAD-style dimension lines (height, length, flat bottom length, rib spacing) — optional
+  // since not every ramp type needs to define these yet.
+  buildDimensions?: (params: P) => HalfPipeDimension[];
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -67,6 +71,7 @@ const RAMPS: Record<RampType, RampSpec<any>> = {
     buildFlatBottomSlab: (p: HalfPipeParams) => buildHalfPipeFlatBottomSlab(p),
     copingXs: (p: HalfPipeParams) => halfPipeCopingXs(p),
     footprint: (p: HalfPipeParams) => halfPipeFootprint(p),
+    buildDimensions: (p: HalfPipeParams) => buildHalfPipeDimensions(p),
   },
 };
 
@@ -150,6 +155,75 @@ function rebuildCoping(type: RampType, deckY: number, params: unknown, width: nu
   }
 }
 
+const dimensionsGroup = new THREE.Group();
+dimensionsGroup.position.y = 0.01; // lifted off the ground plane to avoid z-fighting with it
+scene.add(dimensionsGroup);
+
+const LABEL_FONT_PX = 48;
+const LABEL_WORLD_HEIGHT = 0.25; // meters
+
+/** A camera-facing text billboard drawn on a canvas texture — always in-scene, redrawn every frame with the rest of the WebGL canvas, so there's no separate DOM overlay that can get out of sync. */
+function createLabelSprite(text: string): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d")!;
+  ctx.font = `${LABEL_FONT_PX}px sans-serif`;
+  const paddingX = 16;
+  canvas.width = ctx.measureText(text).width + paddingX * 2;
+  canvas.height = LABEL_FONT_PX * 1.4;
+
+  ctx.font = `${LABEL_FONT_PX}px sans-serif`; // reset after resize, which clears context state
+  ctx.fillStyle = "#ffffffcc";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#222222";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, paddingX, canvas.height / 2);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+  sprite.scale.set((LABEL_WORLD_HEIGHT * canvas.width) / canvas.height, LABEL_WORLD_HEIGHT, 1);
+  return sprite;
+}
+
+// Explicit disposer over exactly what the last rebuild created.
+let disposeDimensions: (() => void) | null = null;
+
+function rebuildDimensions(type: RampType, params: unknown): void {
+  disposeDimensions?.();
+  disposeDimensions = null;
+
+  const build = RAMPS[type].buildDimensions;
+  if (!build) return;
+
+  const groups: THREE.Group[] = [];
+  const sprites: THREE.Sprite[] = [];
+  for (const dim of build(params)) {
+    dimensionsGroup.add(dim.group);
+    groups.push(dim.group);
+
+    const sprite = createLabelSprite(dim.text);
+    sprite.position.copy(dim.labelPosition);
+    dimensionsGroup.add(sprite);
+    sprites.push(sprite);
+  }
+
+  disposeDimensions = () => {
+    for (const group of groups) {
+      // Only the plain Line geometries we build ourselves — not ArrowHelper's internal
+      // line/cone, which Three.js shares as static geometry across every ArrowHelper
+      // instance, so disposing it here would break arrows everywhere.
+      for (const child of group.children) {
+        if (child instanceof THREE.Line) child.geometry.dispose();
+      }
+      dimensionsGroup.remove(group);
+    }
+    for (const sprite of sprites) {
+      sprite.material.map?.dispose();
+      sprite.material.dispose();
+      dimensionsGroup.remove(sprite);
+    }
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let currentParams: any = { ...RAMPS.halfPipe.defaults };
 
@@ -195,6 +269,7 @@ function rebuildRamp(type: RampType): void {
 
   const deckY = RAMPS[type].footprint(currentParams).height;
   rebuildCoping(type, deckY, currentParams, currentParams.width);
+  rebuildDimensions(type, currentParams);
   renderSpaceStatus(type);
 }
 

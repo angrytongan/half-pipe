@@ -35,22 +35,27 @@ thin extrusion of the transition profile per rib, evenly spaced across
 `buildHalfPipeRibs` extracts the shared cross-section (`halfPipeOutline`,
 module-private) and passes it through `src/ramps/ribs.ts`'s `extrudeRibs`
 at the Z positions from `ribZPositions`. Rib count: there are always
-exactly two edge ribs (mandatory — nothing else frames the deck edge),
-plus however many internal ribs the `internalRibCount` slider says (default
-1, range 0–10) — ribs here support the cross members and define the
-transition arc for the skin, not the skin directly, so they're sparse by
-default rather than closely spaced; `ribZPositions(width, internalRibCount)`
-returns `internalRibCount + 2` positions evenly spaced from edge to edge,
-no spacing distance involved. Rib thickness is the `ribThicknessMm` slider
+exactly two single edge ribs (mandatory — nothing else frames the deck
+edge), plus however many *seams* the `internalRibCount` slider says
+(default 1, range 0–10). Each seam is doubled into two adjacent ribs
+straddling its boundary point, touching face to face (offset by
+±half the rib thickness, zero gap) rather than one shared rib — a wide
+ramp is built as separate narrower sections, each with its own edge rib at
+the seam, then screwed together, not as one continuous rib run.
+`ribZPositions(width, internalRibCount, ribThickness)` returns
+`internalRibCount * 2 + 2` positions; the rib-spacing dimension (see
+below) ends up measuring the actual usable section width — a little under
+the naive `width / (internalRibCount + 1)`, since the seam pair's own
+thickness eats into it. Rib thickness is the `ribThicknessMm` slider
 (default 19mm / 3/4" ply, per `research/design.md`'s "Ribs/transoms"),
 stored/displayed in millimetres since that's the natural unit for a
 plywood thickness — converted to meters only where it feeds
-`THREE.ExtrudeGeometry`. `ribs.ts`'s `RIB_THICKNESS_MM` is the constant
-this slider default comes from — `ribZPositions`/`extrudeRibs` themselves
-take count/thickness as parameters, not module constants, so they're fully
-driven by the sliders. `src/main.ts` renders one `THREE.Mesh` per rib
-geometry inside a `THREE.Group` (`rampGroup`), sharing the existing ramp
-material.
+`THREE.ExtrudeGeometry`/`ribZPositions`. `ribs.ts`'s `RIB_THICKNESS_MM` is
+the constant this slider default comes from — `ribZPositions`/`extrudeRibs`
+themselves take count/thickness as parameters, not module constants, so
+they're fully driven by the sliders. `src/main.ts` renders one
+`THREE.Mesh` per rib geometry inside a `THREE.Group` (`rampGroup`),
+sharing the existing ramp material.
 
 The transition curve's bottom tangent point sits on top of the flat
 bottom's own framing, not on the raw ground: `halfPipeOutline` shifts the
@@ -69,6 +74,38 @@ still tested — a correct, reusable geometry-only function, sharing the same
 `halfPipeOutline` so it never drifts from the ribs — but is no longer what's
 rendered in the scene. Ledgers, bracing, and skin are separate, not-yet-built
 backlog items (see features.md).
+
+## Dimension lines
+
+CAD-style dimension lines, first pass, half-pipe only. `src/dimensions/dimensionLine.ts`'s
+`buildLinearDimension` (copied from `../obstacle/src/dimensions/dimensionLine.ts`, same
+standalone-code convention as `centerFootprint` — see decisions.md) draws two extension
+lines, an offset dimension line with arrowheads, and returns a label position; `src/main.ts`
+copies `../obstacle`'s canvas-texture label-sprite approach (`createLabelSprite`) to render
+the text, camera-facing, with no separate DOM overlay to get out of sync.
+
+`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes four dimensions
+analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingXs` —
+no need to build the actual rib geometry just to measure it), all anchored to one edge rib
+since every rib is an identical copy of the others:
+
+- **Height** and **overall length** of one rib (ground to deck; deck to deck) — offset to
+  opposite sides (+Z/−Z) of the left edge rib.
+- **Flat bottom length** (`flatBottomLength`, at the flat span's actual height,
+  `flatBottomThicknessMm/1000`) — offset from the *right* edge rib, not nested with the
+  overall-length dimension: an earlier version stacked it at a smaller offset on the same
+  side, but the label sprites use `depthTest:false` (so they ignore the Z-buffer and can end
+  up rendering in either order) and shared a Z line and X-center closely enough that one
+  label routinely hid the other depending on camera angle. Anchoring it at a distinct edge
+  rib instead gives it a genuinely separate screen position, not just a different offset
+  distance.
+- **Rib spacing** — the gap between the first two
+  `ribZPositions(width, internalRibCount, ribThickness)` entries: the left edge rib and the
+  near rib of the first doubled seam (or, at `internalRibCount: 0`, the two edge ribs
+  themselves) — i.e. the actual usable section width, offset to the side (+X) at deck height.
+
+`src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
+already does for the rib group and coping, called after every param change.
 
 ## Scene
 

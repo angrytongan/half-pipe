@@ -6,14 +6,22 @@ import { centerFootprint } from "./util";
 export const RIB_THICKNESS_MM = 19;
 
 /**
- * Z positions for ribs evenly spaced across width: always two edge ribs (mandatory — nothing
- * else frames the deck edge) plus internalRibCount more between them.
+ * Z positions for ribs evenly spaced across width: always two single edge ribs (mandatory —
+ * nothing else frames the deck edge), plus internalRibCount seams between them. Each seam is
+ * doubled into two ribs straddling its boundary point, offset by ±ribThickness/2 so their
+ * faces touch — a wide ramp is built as separate narrower sections, each with its own edge
+ * rib at the seam, screwed together, not as one rib shared between two sections.
  */
-export function ribZPositions(width: number, internalRibCount: number): number[] {
-  const count = internalRibCount + 2;
+export function ribZPositions(width: number, internalRibCount: number, ribThickness: number): number[] {
+  const boundaryCount = internalRibCount + 2;
   const positions: number[] = [];
-  for (let i = 0; i < count; i++) {
-    positions.push(-width / 2 + (width * i) / (count - 1));
+  for (let i = 0; i < boundaryCount; i++) {
+    const z = -width / 2 + (width * i) / (boundaryCount - 1);
+    if (i === 0 || i === boundaryCount - 1) {
+      positions.push(z);
+    } else {
+      positions.push(z - ribThickness / 2, z + ribThickness / 2);
+    }
   }
   return positions;
 }

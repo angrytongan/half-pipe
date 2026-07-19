@@ -3,36 +3,42 @@ import { describe, expect, it } from "vitest";
 import { extrudeRibs, ribZPositions } from "./ribs";
 
 describe("ribZPositions", () => {
-  it("places the first and last rib exactly at the edges", () => {
-    const positions = ribZPositions(3, 1);
+  it("places the first and last rib exactly at the edges, regardless of ribThickness", () => {
+    const positions = ribZPositions(3, 1, 0.02);
     expect(positions[0]).toBeCloseTo(-1.5, 10);
     expect(positions[positions.length - 1]).toBeCloseTo(1.5, 10);
   });
 
-  it("returns exactly internalRibCount + 2 positions", () => {
+  it("returns 2 edge ribs plus 2 per seam (internalRibCount)", () => {
     for (const width of [0.5, 1, 2, 3, 3.7, 4]) {
       for (const internalRibCount of [0, 1, 2, 5, 10]) {
-        expect(ribZPositions(width, internalRibCount)).toHaveLength(internalRibCount + 2);
+        expect(ribZPositions(width, internalRibCount, 0.02)).toHaveLength(internalRibCount * 2 + 2);
       }
     }
   });
 
-  it("spaces ribs evenly", () => {
-    const positions = ribZPositions(3.7, 4);
-    const gap = positions[1] - positions[0];
-    for (let i = 1; i < positions.length; i++) {
-      expect(positions[i] - positions[i - 1]).toBeCloseTo(gap, 10);
-    }
+  it("doubles each seam into two ribs exactly ribThickness apart, straddling the boundary point", () => {
+    const ribThickness = 0.02;
+    const positions = ribZPositions(3, 1, ribThickness);
+    expect(positions).toHaveLength(4); // 2 edges + 1 doubled seam
+    const [seamA, seamB] = [positions[1], positions[2]];
+    expect(seamB - seamA).toBeCloseTo(ribThickness, 10);
+    expect((seamA + seamB) / 2).toBeCloseTo(0, 10); // straddles the width's midpoint
   });
 
-  it("returns just the two edge ribs when internalRibCount is 0", () => {
-    const positions = ribZPositions(0.05, 0);
+  it("doubles every seam for multiple internal ribs", () => {
+    const positions = ribZPositions(4, 2, 0.02);
+    expect(positions).toHaveLength(6); // 2 edges + 2 doubled seams
+  });
+
+  it("returns just the two edge ribs when internalRibCount is 0, unaffected by ribThickness", () => {
+    const positions = ribZPositions(0.05, 0, 0.02);
     expect(positions).toEqual([-0.025, 0.025]);
   });
 
   it("produces more ribs as internalRibCount grows, for the same width", () => {
-    const loose = ribZPositions(3, 0);
-    const tight = ribZPositions(3, 5);
+    const loose = ribZPositions(3, 0, 0.02);
+    const tight = ribZPositions(3, 5, 0.02);
     expect(tight.length).toBeGreaterThan(loose.length);
   });
 });

@@ -67,7 +67,8 @@ export function buildHalfPipeGeometry(params: HalfPipeParams): THREE.BufferGeome
  */
 export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[] {
   const shape = halfPipeOutline(params);
-  return extrudeRibs(shape, ribZPositions(params.width, params.internalRibCount), params.ribThicknessMm / 1000);
+  const ribThickness = params.ribThicknessMm / 1000;
+  return extrudeRibs(shape, ribZPositions(params.width, params.internalRibCount, ribThickness), ribThickness);
 }
 
 /**

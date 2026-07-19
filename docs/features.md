@@ -20,11 +20,12 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Dimension lines
 
-- [ ] CAD-style dimension lines for all three ramp types, mirroring
-      `../obstacle`'s `src/dimensions/` pattern (`buildLinearDimension` is
-      generic enough to reuse the same technique here).
+- [ ] Dimension lines for quarter-pipe once it rejoins the UI (stage 3) —
+      `buildHalfPipeDimensions` (see status.md) should extend/adapt
+      naturally once quarter-pipe shares the half-pipe's model.
 - [ ] An angular-dimension variant for `transitionAngleDeg` — none of
-      `obstacle`'s dimension code has this either.
+      `obstacle`'s dimension code has this either, and `buildLinearDimension`
+      only handles straight measurements.
 
 ## Ramps
 

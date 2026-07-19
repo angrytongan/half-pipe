@@ -50,10 +50,10 @@ describe("buildHalfPipeGeometry", () => {
 });
 
 describe("buildHalfPipeRibs", () => {
-  it("returns one rib per ribZPositions(width, internalRibCount) entry, at those Z positions", () => {
+  it("returns one rib per ribZPositions(width, internalRibCount, ribThickness) entry, at those Z positions", () => {
     const params = { ...HALF_PIPE_DEFAULTS, width: 3.7 };
     const ribs = buildHalfPipeRibs(params);
-    const positions = ribZPositions(params.width, params.internalRibCount);
+    const positions = ribZPositions(params.width, params.internalRibCount, params.ribThicknessMm / 1000);
     expect(ribs).toHaveLength(positions.length);
 
     ribs.forEach((rib, i) => {
@@ -93,6 +93,11 @@ describe("buildHalfPipeRibs", () => {
     const few = buildHalfPipeRibs({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0 });
     const many = buildHalfPipeRibs({ ...HALF_PIPE_DEFAULTS, internalRibCount: 5 });
     expect(many.length).toBeGreaterThan(few.length);
+  });
+
+  it("doubles each seam into two adjacent ribs, one per build section", () => {
+    const ribs = buildHalfPipeRibs({ ...HALF_PIPE_DEFAULTS, internalRibCount: 1 });
+    expect(ribs).toHaveLength(4); // 2 edges + 1 doubled seam
   });
 });
 
