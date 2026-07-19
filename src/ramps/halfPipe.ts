@@ -1,18 +1,20 @@
 import * as THREE from "three";
 import { centerFootprint } from "./util";
-import { transitionAndDeckPoints } from "./transition";
+import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
+import { buildJoistBox, CURVE_JOIST_SPACING_M, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 
 export interface HalfPipeParams {
   radius: number;
   transitionAngleDeg: number;
   vertHeight: number;
   deckLength: number;
-  flatBottomLength: number;
+  bottomTransitionLength: number;
   width: number;
   ribThicknessMm: number;
   internalRibCount: number;
-  flatBottomThicknessMm: number;
+  joistThicknessMm: number;
+  joistDepthMm: number;
 }
 
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
@@ -20,26 +22,28 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   transitionAngleDeg: 60,
   vertHeight: 0,
   deckLength: 0.6,
-  flatBottomLength: 1.25,
+  bottomTransitionLength: 1.25,
   width: 3,
   ribThicknessMm: RIB_THICKNESS_MM,
   internalRibCount: 1,
-  flatBottomThicknessMm: 90, // ~2x4 actual depth (89mm), per research/design.md's cited "38x89mm nominal"
+  joistThicknessMm: JOIST_THICKNESS_MM,
+  joistDepthMm: JOIST_DEPTH_MM,
 };
 
 /**
  * Closed 2D cross-section shared by the solid wedge and each individual rib. The curve/vert/
- * deck portion sits on top of the flat-bottom framing (shifted up by flatBottomThickness) —
- * the deck-side closing edge below still drops to true y=0 (see decisions.md: it's a
- * rendering convenience, not a structural wall, so it's unaffected by the framing above it).
+ * deck portion sits on top of the bottom transition's own framing (shifted up by the joist's
+ * major dimension, joistDepthMm — that's the height the bottom transition is built to) — the
+ * deck-side closing edge below still drops to true y=0 (see decisions.md: it's a rendering
+ * convenience, not a structural wall, so it's unaffected by the framing above it).
  */
 function halfPipeOutline(params: HalfPipeParams): THREE.Shape {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, flatBottomLength, flatBottomThicknessMm } = params;
-  const flatBottomThickness = flatBottomThicknessMm / 1000;
-  const half = flatBottomLength / 2;
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, joistDepthMm } = params;
+  const jointDepth = joistDepthMm / 1000;
+  const half = bottomTransitionLength / 2;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
-  const left = points.map(([x, y]): [number, number] => [-half - x, y + flatBottomThickness]);
-  const right = points.map(([x, y]): [number, number] => [half + x, y + flatBottomThickness]);
+  const left = points.map(([x, y]): [number, number] => [-half - x, y + jointDepth]);
+  const right = points.map(([x, y]): [number, number] => [half + x, y + jointDepth]);
 
   const shape = new THREE.Shape();
   shape.moveTo(left[left.length - 1][0], 0);
@@ -51,7 +55,7 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape {
 }
 
 /**
- * Two mirrored transitions joined by a flat bottom, decks on both outer
+ * Two mirrored transitions joined by a bottom transition, decks on both outer
  * edges — extruded across width. Closed outline, same solid-wedge convention
  * as quarterPipe.ts. Centered on X/Z, base at Y=0. Geometry-only utility —
  * `buildHalfPipeRibs` below is what's actually rendered (see decisions.md).
@@ -72,18 +76,66 @@ export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[
 }
 
 /**
- * The flat bottom's own framing, sized to fill exactly the gap the rib curves now sit on top
- * of (see halfPipeOutline) — a simple box from y=0 to y=flatBottomThickness, spanning
- * flatBottomLength x width. Not a rib — a separate structural piece (see research/design.md's
- * "Half-pipe as a special case of quarter-pipe": the flat bottom's framing is the one piece a
- * quarter-pipe alone doesn't have).
+ * The bottom transition's own framing, sized to fill exactly the gap the rib curves now sit
+ * on top of (see halfPipeOutline) — a simple box from y=0 to y=joistDepth, spanning
+ * bottomTransitionLength x width. Not a rib — a separate structural piece, screwed to the
+ * curved transition sections (see research/design.md's "Half-pipe as a special case of
+ * quarter-pipe": the bottom transition's framing is the one piece a quarter-pipe alone
+ * doesn't have).
  */
-export function buildHalfPipeFlatBottomSlab(params: HalfPipeParams): THREE.BufferGeometry {
-  const { flatBottomLength, flatBottomThicknessMm, width } = params;
-  const flatBottomThickness = flatBottomThicknessMm / 1000;
-  const geometry = new THREE.BoxGeometry(flatBottomLength, flatBottomThickness, width);
-  geometry.translate(0, flatBottomThickness / 2, 0);
+export function buildBottomTransitionSlab(params: HalfPipeParams): THREE.BufferGeometry {
+  const { bottomTransitionLength, joistDepthMm, width } = params;
+  const jointDepth = joistDepthMm / 1000;
+  const geometry = new THREE.BoxGeometry(bottomTransitionLength, jointDepth, width);
+  geometry.translate(0, jointDepth / 2, 0);
   return geometry;
+}
+
+/**
+ * Joist/ledger skeleton: one joist per (profile landmark point) x (build-section bay).
+ * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
+ * evenly-spaced interior points up the curve (≤ CURVE_JOIST_SPACING_M apart, exact at both
+ * ends — the same trick ribZPositions uses for rib counts), top corner (deck start), and the
+ * end of the floor section (deck's outer edge) — plus one extra joist centered under the
+ * bottom transition, equidistant between the two bottom-corner joists. Section bays reuse
+ * ribZPositions's own output: its doubled-seam ribs already pair up as
+ * (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per pair, so no separate bay-finding
+ * logic is needed — a joist only bridges a real section bay, never the near-zero gap inside
+ * a doubled seam (those two ribs are already face-to-face and screwed together directly).
+ */
+export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, internalRibCount, ribThicknessMm, joistThicknessMm, joistDepthMm } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000;
+  const ribThickness = ribThicknessMm / 1000;
+  const thickness = joistThicknessMm / 1000;
+  const depth = joistDepthMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const deckStart = points[points.length - 2];
+  const deckOuter = points[points.length - 1];
+
+  const curveArcLength = radius * THREE.MathUtils.degToRad(transitionAngleDeg);
+  const curveSegments = Math.max(1, Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M));
+  const curveInteriorPoints = transitionArcPoints(radius, transitionAngleDeg, curveSegments).slice(1, -1);
+
+  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, deckStart, deckOuter];
+  const worldXYs: [number, number][] = [
+    [0, jointDepth], // extra joist, equidistant between the two bottom corners
+    ...localPoints.map(([x, y]): [number, number] => [-half - x, y + jointDepth]),
+    ...localPoints.map(([x, y]): [number, number] => [half + x, y + jointDepth]),
+  ];
+
+  const ribZs = ribZPositions(width, internalRibCount, ribThickness);
+  const joists: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < ribZs.length; i += 2) {
+    const zStart = ribZs[i];
+    const zEnd = ribZs[i + 1];
+    for (const [x, y] of worldXYs) {
+      joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth));
+    }
+  }
+  return joists;
 }
 
 /**
@@ -94,8 +146,8 @@ export function buildHalfPipeFlatBottomSlab(params: HalfPipeParams): THREE.Buffe
  * is a no-op here — unlike quarterPipe's, no span/offset math is needed.
  */
 export function halfPipeCopingXs(params: HalfPipeParams): [number, number] {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, flatBottomLength } = params;
-  const half = flatBottomLength / 2;
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength } = params;
+  const half = bottomTransitionLength / 2;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const [deckStartX] = points[points.length - 2];
   return [-(half + deckStartX), half + deckStartX];
@@ -109,12 +161,12 @@ export function halfPipeCopingXs(params: HalfPipeParams): [number, number] {
  * without building a BufferGeometry just to measure it.
  */
 export function halfPipeFootprint(params: HalfPipeParams): { length: number; width: number; height: number } {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, flatBottomLength, width, flatBottomThicknessMm } = params;
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, joistDepthMm } = params;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const [deckOuterX, deckOuterY] = points[points.length - 1];
   return {
-    length: flatBottomLength + 2 * deckOuterX,
+    length: bottomTransitionLength + 2 * deckOuterX,
     width,
-    height: deckOuterY + flatBottomThicknessMm / 1000,
+    height: deckOuterY + joistDepthMm / 1000,
   };
 }

@@ -4,18 +4,18 @@ import { HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 
 describe("buildHalfPipeDimensions", () => {
-  it("returns one dimension each for height, length, flat bottom length, rib spacing, and width, labeled to two decimals", () => {
+  it("returns one dimension each for height, length, bottom transition length, rib spacing, and width, labeled to two decimals", () => {
     const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
     expect(dims).toHaveLength(5);
-    // height: radius * (1 - cos(60deg)) + flatBottomThicknessMm/1000 = 0.9 + 0.09
-    // length: flatBottomLength + 2 * (radius * sin(60deg) + deckLength)
-    // flat bottom: flatBottomLength itself
+    // height: radius * (1 - cos(60deg)) + joistDepthMm/1000 = 0.9 + 0.09
+    // length: bottomTransitionLength + 2 * (radius * sin(60deg) + deckLength)
+    // bottom transition: bottomTransitionLength itself
     // spacing: inside surface to inside surface, not centerline — the centerline gap
-    // (edge rib to the near rib of the doubled seam, 1.4905m) minus one full rib thickness
-    // (ribThicknessMm/1000 = 0.019m), since each rib eats half its own thickness into the gap
+    // (edge rib to the near rib of the doubled seam, 1.495m) minus one full rib thickness
+    // (ribThicknessMm/1000 = 0.01m), since each rib eats half its own thickness into the gap
     // width: outside surface to outside surface, not centerline — the width param plus one
     // full rib thickness, since each edge rib sticks out half its own thickness beyond width/2
-    expect(dims.map((d) => d.text)).toEqual(["0.99m", "5.57m", "1.25m", "1.47m", "3.02m"]);
+    expect(dims.map((d) => d.text)).toEqual(["0.99m", "5.57m", "1.25m", "1.49m", "3.01m"]);
   });
 
   it("computes width as the centerline width plus one rib thickness, and rib spacing as the centerline gap minus one rib thickness", () => {
@@ -48,11 +48,11 @@ describe("buildHalfPipeDimensions", () => {
 
   it("measures rib spacing as the width minus one rib thickness when there are no internal ribs", () => {
     const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0, width: 2.4 });
-    expect(dims[3].text).toBe("2.38m"); // 2.4 - 0.019 (default ribThicknessMm 19)
+    expect(dims[3].text).toBe("2.39m"); // 2.4 - 0.01 (default ribThicknessMm 10)
   });
 
-  it("relabels the flat bottom length dimension as flatBottomLength changes", () => {
-    const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, flatBottomLength: 2 });
+  it("relabels the bottom transition length dimension as bottomTransitionLength changes", () => {
+    const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, bottomTransitionLength: 2 });
     expect(dims[2].text).toBe("2.00m");
   });
 
@@ -63,23 +63,23 @@ describe("buildHalfPipeDimensions", () => {
     expect(lengthDim.labelPosition.z).toBeLessThan(ribZ);
   });
 
-  it("places the flat-bottom-length dimension at the opposite edge rib from the overall-length one, so their labels never share a screen position", () => {
-    const [, lengthDim, flatBottomDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+  it("places the bottom-transition-length dimension at the opposite edge rib from the overall-length one, so their labels never share a screen position", () => {
+    const [, lengthDim, bottomTransitionDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
     const halfWidth = HALF_PIPE_DEFAULTS.width / 2;
     expect(lengthDim.labelPosition.z).toBeCloseTo(-halfWidth - 0.4 - 0.08, 2);
-    expect(flatBottomDim.labelPosition.z).toBeCloseTo(halfWidth + 0.4 + 0.08, 2);
+    expect(bottomTransitionDim.labelPosition.z).toBeCloseTo(halfWidth + 0.4 + 0.08, 2);
   });
 
   it("relabels the width dimension as width changes", () => {
     const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, width: 4 });
-    expect(dims[4].text).toBe("4.02m"); // 4 + 0.019 (default ribThicknessMm 19)
+    expect(dims[4].text).toBe("4.01m"); // 4 + 0.01 (default ribThicknessMm 10)
   });
 
   it("places the width dimension on the opposite X side from the rib-spacing dimension, at a distinct anchor from every other dimension", () => {
-    const [heightDim, lengthDim, flatBottomDim, spacingDim, widthDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+    const [heightDim, lengthDim, bottomTransitionDim, spacingDim, widthDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
 
     expect(widthDim.labelPosition.x).toBeLessThan(spacingDim.labelPosition.x);
-    for (const other of [heightDim, lengthDim, flatBottomDim, spacingDim]) {
+    for (const other of [heightDim, lengthDim, bottomTransitionDim, spacingDim]) {
       expect(widthDim.labelPosition.distanceTo(other.labelPosition)).toBeGreaterThan(0.5);
     }
   });

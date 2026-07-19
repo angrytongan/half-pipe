@@ -14,23 +14,23 @@ function formatMeters(value: number): string {
 }
 
 /**
- * Height/length/flat-bottom-length/rib-spacing dimension lines for a half-pipe, computed
+ * Height/length/bottom-transition-length/rib-spacing dimension lines for a half-pipe, computed
  * analytically from HalfPipeParams (same approach as halfPipeFootprint/halfPipeCopingXs)
  * rather than from built rib geometry. Only one rib and one rib-to-rib gap are dimensioned —
  * every rib is an identical copy of the others and ribs are evenly spaced (see ribZPositions),
  * so dimensioning each one would be redundant. Each dimension gets its own distinct position
  * (not just a different offset distance) — label sprites use depthTest:false so they don't
  * respect the Z-buffer, and two dimensions sharing a Z line and X center (as an earlier,
- * merely-offset-differently version of this code did for length/flat-bottom-length) can end
- * up with near-identical screen positions from some camera angles, hiding one label behind
+ * merely-offset-differently version of this code did for length/bottom-transition-length) can
+ * end up with near-identical screen positions from some camera angles, hiding one label behind
  * the other.
  */
 export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimension[] {
-  const { width, internalRibCount, ribThicknessMm, flatBottomLength, flatBottomThicknessMm } = params;
+  const { width, internalRibCount, ribThicknessMm, bottomTransitionLength, joistDepthMm } = params;
   const { length, height } = halfPipeFootprint(params);
   const halfLength = length / 2;
-  const halfFlatBottom = flatBottomLength / 2;
-  const flatBottomY = flatBottomThicknessMm / 1000;
+  const halfBottomTransition = bottomTransitionLength / 2;
+  const bottomTransitionY = joistDepthMm / 1000;
   const halfWidth = width / 2;
   const ribThickness = ribThicknessMm / 1000;
   const halfRibThickness = ribThickness / 2;
@@ -50,9 +50,9 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
   );
   // Drawn at the opposite edge rib from length/height so its label never shares a screen
   // position with the overall-length one, regardless of camera angle.
-  const flatBottomDim = buildLinearDimension(
-    new THREE.Vector3(-halfFlatBottom, flatBottomY, halfWidth),
-    new THREE.Vector3(halfFlatBottom, flatBottomY, halfWidth),
+  const bottomTransitionDim = buildLinearDimension(
+    new THREE.Vector3(-halfBottomTransition, bottomTransitionY, halfWidth),
+    new THREE.Vector3(halfBottomTransition, bottomTransitionY, halfWidth),
     new THREE.Vector3(0, 0, 1),
     OFFSET_DISTANCE,
   );
@@ -79,7 +79,7 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
   return [
     { ...heightDim, text: formatMeters(height) },
     { ...lengthDim, text: formatMeters(length) },
-    { ...flatBottomDim, text: formatMeters(flatBottomLength) },
+    { ...bottomTransitionDim, text: formatMeters(bottomTransitionLength) },
     { ...spacingDim, text: formatMeters(gapEndZ - gapStartZ - ribThickness) },
     { ...widthDim, text: formatMeters(width + ribThickness) },
   ];

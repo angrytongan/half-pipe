@@ -11,11 +11,11 @@ Two ramp types built, each a pure geometry builder in `src/ramps/`, sharing curv
   `transitionAngleDeg`), optional vertical extension (`vertHeight`), flat
   deck platform (`deckLength`). Solid wedge, closed `THREE.Shape` extruded
   across `width`. Also exports `quarterPipeCopingX` (see Scene below).
-- `halfPipe.ts` — two mirrored quarter-pipe transitions joined by a flat
-  bottom (`flatBottomLength`), independent decks on both outer edges. Shares
-  `transition.ts`'s `transitionAndDeckPoints` with `quarterPipe.ts` so the
-  two transitions can't drift apart. Also exports `halfPipeCopingXs` and
-  `halfPipeFootprint` (see Available space below).
+- `halfPipe.ts` — two mirrored quarter-pipe transitions joined by a bottom
+  transition (`bottomTransitionLength`), independent decks on both outer
+  edges. Shares `transition.ts`'s `transitionAndDeckPoints` with
+  `quarterPipe.ts` so the two transitions can't drift apart. Also exports
+  `halfPipeCopingXs` and `halfPipeFootprint` (see Available space below).
 
 `quarterPipe.ts` is currently unwired from the UI (see decisions.md) but
 still builds, still tested — `src/main.ts`'s `RampType` is `"halfPipe"`
@@ -47,9 +47,8 @@ the seam, then screwed together, not as one continuous rib run.
 below) ends up measuring the actual usable section width — a little under
 the naive `width / (internalRibCount + 1)`, since the seam pair's own
 thickness eats into it. Rib thickness is the `ribThicknessMm` slider
-(default 19mm / 3/4" ply, per `research/design.md`'s "Ribs/transoms"),
-stored/displayed in millimetres since that's the natural unit for a
-plywood thickness — converted to meters only where it feeds
+(default 10mm), stored/displayed in millimetres since that's the natural
+unit for a plywood thickness — converted to meters only where it feeds
 `THREE.ExtrudeGeometry`/`ribZPositions`. `ribs.ts`'s `RIB_THICKNESS_MM` is
 the constant this slider default comes from — `ribZPositions`/`extrudeRibs`
 themselves take count/thickness as parameters, not module constants, so
@@ -57,23 +56,56 @@ they're fully driven by the sliders. `src/main.ts` renders one
 `THREE.Mesh` per rib geometry inside a `THREE.Group` (`rampGroup`),
 sharing the existing ramp material.
 
-The transition curve's bottom tangent point sits on top of the flat
-bottom's own framing, not on the raw ground: `halfPipeOutline` shifts the
-curve/vert/deck portion of each rib up by the `flatBottomThicknessMm`
-slider (default 90mm, a round number close to a 2x4's actual depth per
-`research/design.md`'s cited "38×89mm nominal" — also millimetres, same
-reasoning as rib thickness). The deck-side closing edge (the non-structural convenience
-noted below that closes the 2D outline for extrusion) still drops to true
-`y=0`, unaffected. `buildHalfPipeFlatBottomSlab` renders that framing as a
-simple box from `y=0` to `y=flatBottomThicknessMm/1000`, spanning
-`flatBottomLength × width`, so the thickness the ribs meet is actually
-visible (`slabMesh` in `main.ts`) rather than an invisible gap.
+The transition curve's bottom tangent point sits on top of the bottom
+transition's own framing, not on the raw ground: `halfPipeOutline` shifts
+the curve/vert/deck portion of each rib up by the `joistDepthMm` slider
+(default 90mm) — the joist's *major* dimension is what now determines this
+height, since that's what physically holds the transition ribs up (see
+"Joists" below); there's no separate thickness control for the bottom
+transition anymore. The deck-side closing edge (the non-structural
+convenience noted below that closes the 2D outline for extrusion) still
+drops to true `y=0`, unaffected. `buildBottomTransitionSlab` renders that
+framing as a simple box from `y=0` to `y=joistDepthMm/1000`, spanning
+`bottomTransitionLength × width`, so the thickness the ribs meet is
+actually visible (`bottomTransitionMesh` in `main.ts`) rather than an
+invisible gap — screwed to the curved transition sections as its own
+separate construction, not fused with the ribs.
 
 `buildHalfPipeGeometry` (the full-`width` solid wedge) still exists and is
 still tested — a correct, reusable geometry-only function, sharing the same
 `halfPipeOutline` so it never drifts from the ribs — but is no longer what's
-rendered in the scene. Ledgers, bracing, and skin are separate, not-yet-built
+rendered in the scene. Bracing and skin are separate, not-yet-built
 backlog items (see features.md).
+
+### Joists
+
+`src/ramps/joists.ts`'s `buildJoistBox` is a single ledger: thickness (X)
+by depth (Y) cross-section, centered on a given (x, y), spanning Z between
+two adjacent ribs — "major length vertical" means the deeper dimension
+(`joistDepthMm`, default 90mm) is the Y (vertical) extent, the thinner one
+(`joistThicknessMm`, default 45mm) the X extent. `halfPipe.ts`'s
+`buildHalfPipeJoists` places one joist per (profile landmark) × (build-
+section bay) pair:
+
+- **Landmarks per side**: the bottom corner (curve tangent, where it meets
+  the bottom transition), evenly-spaced interior points up the curve
+  (`transitionArcPoints` with a `segments` count computed so spacing never
+  exceeds `CURVE_JOIST_SPACING_M` — 200mm, rounded from `research/design.md`'s
+  cited ~203mm for construction ease — and lands exactly on both ends, the
+  same trick `ribZPositions` uses for rib counts), the top corner (deck
+  start), and the end of the floor section (the deck's outer edge).
+- One extra joist, not mirrored, centered at `x=0` — equidistant between
+  the two bottom-corner joists, under the middle of the bottom transition.
+- **Build-section bays** reuse `ribZPositions`'s own output directly: its
+  doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
+  `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the
+  near-zero gap inside a doubled seam (those two ribs are already
+  face-to-face and screwed together directly) — no separate bay-finding
+  logic needed.
+
+`src/main.ts` renders these in their own `THREE.Group` (`joistGroup`) with
+a distinct wood-toned material, so dozens of small joist boxes read as a
+different material from the blue ribs rather than visual noise.
 
 ## Dimension lines
 
@@ -91,8 +123,8 @@ since every rib is an identical copy of the others:
 
 - **Height** and **overall length** of one rib (ground to deck; deck to deck) — offset to
   opposite sides (+Z/−Z) of the left edge rib.
-- **Flat bottom length** (`flatBottomLength`, at the flat span's actual height,
-  `flatBottomThicknessMm/1000`) — offset from the *right* edge rib, not nested with the
+- **Bottom transition length** (`bottomTransitionLength`, at the flat span's actual height,
+  `joistDepthMm/1000`) — offset from the *right* edge rib, not nested with the
   overall-length dimension: an earlier version stacked it at a smaller offset on the same
   side, but the label sprites use `depthTest:false` (so they ignore the Z-buffer and can end
   up rendering in either order) and shared a Z line and X-center closely enough that one
@@ -131,8 +163,8 @@ box — see decisions.md for why. Quarter-pipe gets one, half-pipe gets two.
 development" pill, GitHub link) matching `obstacle`'s header, above an
 `.app` flex row holding the `#panel` (type select at the top, the
 always-visible space-status pills below it, then a divider, then an
-accordion of four independently-collapsible sections — Available space,
-Ribs, Flat bottom, Ramp parameters, each a plain native
+accordion of five independently-collapsible sections — Available space,
+Ramp parameters, Ribs, Joists, Bottom transition, each a plain native
 `<details>`/`<summary>` so no JS is needed — then the reset button) and
 `#viewport` (3D view) cards. No method-select/BOM/tooltip UI this round —
 see features.md.

@@ -8,7 +8,7 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       the half-pipe's available-space + structural-rendering model — see
       decisions.md's "Quarter-pipe is temporarily out of the UI" note.
       Expected to be comparatively small, since a half-pipe is built here
-      as two quarter-pipe transitions plus a flat bottom.
+      as two quarter-pipe transitions plus a bottom transition.
 
 ## Construction / BOM
 

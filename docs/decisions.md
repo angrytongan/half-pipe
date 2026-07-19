@@ -23,7 +23,7 @@ Scope/architecture decisions, so they don't need re-asking each session. Update 
 
 - **Available length/width/height are a constraint you validate against, not
   inputs the app solves from** — the alternative (derive `radius`/
-  `transitionAngleDeg`/`flatBottomLength`/etc. from available space) was
+  `transitionAngleDeg`/`bottomTransitionLength`/etc. from available space) was
   considered and explicitly rejected: it would turn most of today's sliders
   into read-only outputs, which is a much bigger change than "tell me if
   this fits." Available length/width/height live as their own UI state in
