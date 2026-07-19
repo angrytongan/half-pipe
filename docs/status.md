@@ -80,8 +80,8 @@ backlog items (see features.md).
 ### Joists
 
 `src/ramps/joists.ts`'s `buildJoistBox` is a single ledger: thickness (X)
-by depth (Y) cross-section, centered on a given (x, y), spanning Z between
-two adjacent ribs — "major length vertical" means the deeper dimension
+by depth (Y) cross-section, spanning Z between two adjacent ribs — "major
+length vertical" means the deeper dimension
 (`joistDepthMm`, default 90mm) is the Y (vertical) extent, the thinner one
 (`joistThicknessMm`, default 45mm) the X extent. `halfPipe.ts`'s
 `buildHalfPipeJoists` places one joist per (profile landmark) × (build-
@@ -101,7 +101,24 @@ section bay) pair:
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the
   near-zero gap inside a doubled seam (those two ribs are already
   face-to-face and screwed together directly) — no separate bay-finding
-  logic needed.
+  logic needed. `ribZPositions` returns rib centerlines, so each joist's Z
+  span is inset by `ribThickness / 2` on both ends — it's built to the ribs'
+  inside faces, not their centerlines, matching how it'd actually be cut and
+  fitted between them.
+- **Tilt**: `buildJoistBox` takes an optional `angle` (radians, about Z).
+  Joists on the curve (and the deck-start landmark, which is the curve's own
+  endpoint) are rotated to the local tangent angle — `transitionArcPoints`'s
+  parameter `t` *is* that angle — so their top face sits flush against the
+  curved skin instead of staying horizontal. The bottom-corner, center, and
+  deck-outer landmarks are flat (angle 0) already, so they're unrotated. The
+  angle is mirrored (negated) on the left side to match the existing X
+  mirroring.
+- **Anchor**: `(x, y)` anchors the joist's *top* face, not its center — like
+  a ceiling joist notched to a roofline, the top edge has to be coplanar
+  with the rib curve at that point, with the joist's body hanging
+  below/behind it. `buildJoistBox` translates the box depth/2 back from
+  `(x, y)` along the tilted face's own normal `(-sin(angle), cos(angle))` to
+  compute the actual box center.
 
 `src/main.ts` renders these in their own `THREE.Group` (`joistGroup`) with
 a distinct wood-toned material, so dozens of small joist boxes read as a

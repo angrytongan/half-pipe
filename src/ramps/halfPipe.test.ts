@@ -10,6 +10,7 @@ import {
 } from "./halfPipe";
 import { ribZPositions } from "./ribs";
 import { CURVE_JOIST_SPACING_M } from "./joists";
+import { transitionAndDeckPoints } from "./transition";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -139,12 +140,12 @@ describe("buildHalfPipeJoists", () => {
     expect(more.length - base.length).toBe(perSection);
   });
 
-  it("spans exactly one section's rib-to-rib gap in Z for every joist — never the seam's own internal gap", () => {
+  it("spans between the ribs' inside faces, not their centerlines, for every joist — never the seam's own internal gap", () => {
     const params = { ...HALF_PIPE_DEFAULTS, internalRibCount: 2 };
     const ribThickness = params.ribThicknessMm / 1000;
     const ribZs = ribZPositions(params.width, params.internalRibCount, ribThickness);
     const validSpans = new Set<number>();
-    for (let i = 0; i < ribZs.length; i += 2) validSpans.add(Number((ribZs[i + 1] - ribZs[i]).toFixed(6)));
+    for (let i = 0; i < ribZs.length; i += 2) validSpans.add(Number((ribZs[i + 1] - ribZs[i] - ribThickness).toFixed(6)));
 
     for (const joist of buildHalfPipeJoists(params)) {
       joist.computeBoundingBox();
@@ -164,14 +165,53 @@ describe("buildHalfPipeJoists", () => {
     expect(atCenter).toBe(true);
   });
 
-  it("sizes every joist's cross-section from joistThicknessMm (X) and joistDepthMm (Y)", () => {
+  it("sizes the flat landmarks (center + bottom corners) exactly joistThicknessMm (X) x joistDepthMm (Y)", () => {
     const params = { ...HALF_PIPE_DEFAULTS, joistThicknessMm: 60, joistDepthMm: 140 };
-    for (const joist of buildHalfPipeJoists(params)) {
+    const jointDepth = params.joistDepthMm / 1000;
+    const flat = buildHalfPipeJoists(params).filter((joist) => {
       joist.computeBoundingBox();
+      const topEdge = joist.boundingBox!.max.y; // unrotated joists anchor their top edge at jointDepth
+      return Math.abs(topEdge - jointDepth) < 1e-6;
+    });
+    expect(flat.length).toBeGreaterThan(0);
+    for (const joist of flat) {
       const box = joist.boundingBox!;
       expect(box.max.x - box.min.x).toBeCloseTo(0.06, 5);
       expect(box.max.y - box.min.y).toBeCloseTo(0.14, 5);
     }
+  });
+
+  it("tilts the curve/deck-start joists to the local tangent angle instead of staying flat", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const thickness = params.joistThicknessMm / 1000;
+    const depth = params.joistDepthMm / 1000;
+    const jointDepth = params.joistDepthMm / 1000;
+    const sweep = (params.transitionAngleDeg * Math.PI) / 180;
+    const expectedX = thickness * Math.abs(Math.cos(sweep)) + depth * Math.abs(Math.sin(sweep));
+    const expectedY = thickness * Math.abs(Math.sin(sweep)) + depth * Math.abs(Math.cos(sweep));
+
+    const half = params.bottomTransitionLength / 2;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const [deckStartX, deckStartY] = points[points.length - 2];
+    const deckStartWorldX = half + deckStartX;
+    const deckStartWorldY = deckStartY + jointDepth;
+    // The box's center sits depth/2 back from the anchored top edge, along the rotated normal
+    // (-sin(angle), cos(angle)) — see buildJoistBox's own doc comment.
+    const expectedCenterX = deckStartWorldX + Math.sin(sweep) * (depth / 2);
+    const expectedCenterY = deckStartWorldY - Math.cos(sweep) * (depth / 2);
+
+    const deckStartJoist = buildHalfPipeJoists(params).find((joist) => {
+      joist.computeBoundingBox();
+      const box = joist.boundingBox!;
+      const x = (box.min.x + box.max.x) / 2;
+      const y = (box.min.y + box.max.y) / 2;
+      return Math.abs(x - expectedCenterX) < 1e-6 && Math.abs(y - expectedCenterY) < 1e-6;
+    });
+
+    expect(deckStartJoist).toBeDefined();
+    const box = deckStartJoist!.boundingBox!;
+    expect(box.max.x - box.min.x).toBeCloseTo(expectedX, 5);
+    expect(box.max.y - box.min.y).toBeCloseTo(expectedY, 5);
   });
 });
 
@@ -205,11 +245,11 @@ describe("halfPipeFootprint", () => {
 
   it("computes length/width/height at defaults", () => {
     const footprint = halfPipeFootprint(HALF_PIPE_DEFAULTS);
-    // bottomTransitionLength (1.25) + 2 * (radius * sin(60deg) + deckLength) = 1.25 + 2 * (1.8*sin(60deg) + 0.6)
-    expect(footprint.length).toBeCloseTo(5.5677, 4);
+    // bottomTransitionLength (2.25) + 2 * (radius * sin(57deg) + deckLength) = 2.25 + 2 * (1.8*sin(57deg) + 0.3)
+    expect(footprint.length).toBeCloseTo(5.8692, 4);
     expect(footprint.width).toBe(3);
-    // radius * (1 - cos(60deg)) + joistDepthMm / 1000 (90mm)
-    expect(footprint.height).toBeCloseTo(0.99, 5);
+    // radius * (1 - cos(57deg)) + joistDepthMm / 1000 (90mm)
+    expect(footprint.height).toBeCloseTo(0.90965, 5);
   });
 
   it("grows length 1:1 with bottomTransitionLength, and width 1:1 with width", () => {

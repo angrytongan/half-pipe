@@ -115,24 +115,32 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   const deckStart = points[points.length - 2];
   const deckOuter = points[points.length - 1];
 
-  const curveArcLength = radius * THREE.MathUtils.degToRad(transitionAngleDeg);
+  const sweep = THREE.MathUtils.degToRad(transitionAngleDeg);
+  const curveArcLength = radius * sweep;
   const curveSegments = Math.max(1, Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M));
   const curveInteriorPoints = transitionArcPoints(radius, transitionAngleDeg, curveSegments).slice(1, -1);
+  const curveInteriorAngles = curveInteriorPoints.map((_, i) => ((i + 1) / curveSegments) * sweep);
 
+  // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
+  // rising through the curve, flat again at the vert/deck-start (its own tangent is `sweep`),
+  // flat on the deck floor (0) — see transitionAndDeckPoints for why deckStart/deckOuter differ.
   const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, deckStart, deckOuter];
-  const worldXYs: [number, number][] = [
-    [0, jointDepth], // extra joist, equidistant between the two bottom corners
-    ...localPoints.map(([x, y]): [number, number] => [-half - x, y + jointDepth]),
-    ...localPoints.map(([x, y]): [number, number] => [half + x, y + jointDepth]),
+  const localAngles: number[] = [0, ...curveInteriorAngles, sweep, 0];
+  const worldJoists: { x: number; y: number; angle: number }[] = [
+    { x: 0, y: jointDepth, angle: 0 }, // extra joist, equidistant between the two bottom corners
+    ...localPoints.map(([x, y], i) => ({ x: -half - x, y: y + jointDepth, angle: -localAngles[i] })),
+    ...localPoints.map(([x, y], i) => ({ x: half + x, y: y + jointDepth, angle: localAngles[i] })),
   ];
 
   const ribZs = ribZPositions(width, internalRibCount, ribThickness);
   const joists: THREE.BufferGeometry[] = [];
   for (let i = 0; i < ribZs.length; i += 2) {
-    const zStart = ribZs[i];
-    const zEnd = ribZs[i + 1];
-    for (const [x, y] of worldXYs) {
-      joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth));
+    // ribZs are rib centerlines — the joist is built to butt against each rib's inside face,
+    // not its centerline, so it spans the actual bay, not the centerline-to-centerline gap.
+    const zStart = ribZs[i] + ribThickness / 2;
+    const zEnd = ribZs[i + 1] - ribThickness / 2;
+    for (const { x, y, angle } of worldJoists) {
+      joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth, angle));
     }
   }
   return joists;

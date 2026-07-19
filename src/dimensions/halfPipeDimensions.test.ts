@@ -7,15 +7,15 @@ describe("buildHalfPipeDimensions", () => {
   it("returns one dimension each for height, length, bottom transition length, rib spacing, and width, labeled to two decimals", () => {
     const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
     expect(dims).toHaveLength(5);
-    // height: radius * (1 - cos(60deg)) + joistDepthMm/1000 = 0.9 + 0.09
-    // length: bottomTransitionLength + 2 * (radius * sin(60deg) + deckLength)
+    // height: radius * (1 - cos(57deg)) + joistDepthMm/1000 = 0.8196... + 0.09
+    // length: bottomTransitionLength + 2 * (radius * sin(57deg) + deckLength)
     // bottom transition: bottomTransitionLength itself
     // spacing: inside surface to inside surface, not centerline — the centerline gap
     // (edge rib to the near rib of the doubled seam, 1.495m) minus one full rib thickness
     // (ribThicknessMm/1000 = 0.01m), since each rib eats half its own thickness into the gap
     // width: outside surface to outside surface, not centerline — the width param plus one
     // full rib thickness, since each edge rib sticks out half its own thickness beyond width/2
-    expect(dims.map((d) => d.text)).toEqual(["0.99m", "5.57m", "1.25m", "1.49m", "3.01m"]);
+    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.49m", "3.01m"]);
   });
 
   it("computes width as the centerline width plus one rib thickness, and rib spacing as the centerline gap minus one rib thickness", () => {
