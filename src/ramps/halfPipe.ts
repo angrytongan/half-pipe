@@ -13,11 +13,11 @@ export interface HalfPipeParams {
 
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   radius: 1.8,
-  transitionAngleDeg: 90,
+  transitionAngleDeg: 60,
   vertHeight: 0,
   deckLength: 0.6,
-  flatBottomLength: 3,
-  width: 2,
+  flatBottomLength: 1.25,
+  width: 3,
 };
 
 /**
@@ -56,4 +56,22 @@ export function halfPipeCopingXs(params: HalfPipeParams): [number, number] {
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const [deckStartX] = points[points.length - 2];
   return [-(half + deckStartX), half + deckStartX];
+}
+
+/**
+ * Footprint this ramp actually needs — length (X), width (Z), height (Y) —
+ * computed analytically from the same transitionAndDeckPoints used to build
+ * the geometry, so it can't drift from what's actually rendered. Cheap
+ * enough to call on every param change for space-constraint validation
+ * without building a BufferGeometry just to measure it.
+ */
+export function halfPipeFootprint(params: HalfPipeParams): { length: number; width: number; height: number } {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, flatBottomLength, width } = params;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const [deckOuterX, deckOuterY] = points[points.length - 1];
+  return {
+    length: flatBottomLength + 2 * deckOuterX,
+    width,
+    height: deckOuterY,
+  };
 }

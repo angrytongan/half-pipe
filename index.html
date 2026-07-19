@@ -96,6 +96,35 @@
         margin-bottom: 1rem;
         cursor: pointer;
       }
+      #space {
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #8884;
+      }
+      #space h2 {
+        font-size: 0.85rem;
+        margin: 0 0 0.75rem;
+      }
+      #space-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        margin-top: 0.75rem;
+      }
+      .space-status {
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .space-status.safe {
+        background: #1a7f371a;
+        color: #1a7f37;
+      }
+      .space-status.unsafe {
+        background: #cf222e1a;
+        color: #cf222e;
+      }
       #viewport {
         flex: 1;
         min-width: 0;
@@ -130,8 +159,12 @@
     </header>
     <div class="app">
       <div id="panel">
+        <div id="space">
+          <h2>Available space</h2>
+          <div id="space-sliders"></div>
+          <div id="space-status"></div>
+        </div>
         <select id="type-select">
-          <option value="quarterPipe">Quarter-pipe</option>
           <option value="halfPipe">Half-pipe</option>
         </select>
         <div id="sliders"></div>
