@@ -25,8 +25,8 @@ export function ribZPositions(width: number, internalRibCount: number, ribThickn
   return positions;
 }
 
-/** One thin extrusion of shape per Z position, X-centered, placed at its Z slot. */
-export function extrudeRibs(shape: THREE.Shape, zPositions: number[], thickness: number): THREE.BufferGeometry[] {
+/** One thin extrusion of shape(s) per Z position, X-centered, placed at its Z slot. */
+export function extrudeRibs(shape: THREE.Shape | THREE.Shape[], zPositions: number[], thickness: number): THREE.BufferGeometry[] {
   return zPositions.map((z) => {
     const geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
     centerFootprint(geometry);

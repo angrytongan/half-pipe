@@ -50,6 +50,20 @@ describe("buildHalfPipeGeometry", () => {
     const wideSpan = wide.boundingBox!.max.x - wide.boundingBox!.min.x;
     expect(wideSpan - narrowSpan).toBeCloseTo(4, 2);
   });
+
+  it("ends each side at the bottommost curve joist's inside face, not its centerline — still doesn't bridge to the other side", () => {
+    const half = HALF_PIPE_DEFAULTS.bottomTransitionLength / 2;
+    const expectedBaseX = half - HALF_PIPE_DEFAULTS.joistThicknessMm / 1000 / 2;
+    const geometry = buildHalfPipeGeometry(HALF_PIPE_DEFAULTS);
+    const positions = geometry.getAttribute("position");
+    let minGroundAbsX = Infinity;
+    for (let i = 0; i < positions.count; i++) {
+      expect(Math.abs(positions.getX(i))).toBeGreaterThanOrEqual(expectedBaseX - 1e-6); // never bridges to the other side
+      if (Math.abs(positions.getY(i)) < 1e-6) minGroundAbsX = Math.min(minGroundAbsX, Math.abs(positions.getX(i)));
+    }
+    // the ground-level (y=0) closing edge is what actually moved — in to the joist's inside face
+    expect(minGroundAbsX).toBeCloseTo(expectedBaseX, 5);
+  });
 });
 
 describe("buildHalfPipeRibs", () => {
@@ -96,6 +110,21 @@ describe("buildHalfPipeRibs", () => {
     const few = buildHalfPipeRibs({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0 });
     const many = buildHalfPipeRibs({ ...HALF_PIPE_DEFAULTS, internalRibCount: 5 });
     expect(many.length).toBeGreaterThan(few.length);
+  });
+
+  it("ends each rib at the bottommost curve joist's inside face, not its centerline — still doesn't bridge to the other side", () => {
+    const half = HALF_PIPE_DEFAULTS.bottomTransitionLength / 2;
+    const expectedBaseX = half - HALF_PIPE_DEFAULTS.joistThicknessMm / 1000 / 2;
+    for (const rib of buildHalfPipeRibs(HALF_PIPE_DEFAULTS)) {
+      const positions = rib.getAttribute("position");
+      let minGroundAbsX = Infinity;
+      for (let i = 0; i < positions.count; i++) {
+        expect(Math.abs(positions.getX(i))).toBeGreaterThanOrEqual(expectedBaseX - 1e-6); // never bridges to the other side
+        if (Math.abs(positions.getY(i)) < 1e-6) minGroundAbsX = Math.min(minGroundAbsX, Math.abs(positions.getX(i)));
+      }
+      // the ground-level (y=0) closing edge is what actually moved — in to the joist's inside face
+      expect(minGroundAbsX).toBeCloseTo(expectedBaseX, 5);
+    }
   });
 
   it("doubles each seam into two adjacent ribs, one per build section", () => {

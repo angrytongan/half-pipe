@@ -31,27 +31,40 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
 };
 
 /**
- * Closed 2D cross-section shared by the solid wedge and each individual rib. The curve/vert/
- * deck portion sits on top of the bottom transition's own framing (shifted up by the joist's
- * major dimension, joistDepthMm — that's the height the bottom transition is built to) — the
- * deck-side closing edge below still drops to true y=0 (see decisions.md: it's a rendering
- * convenience, not a structural wall, so it's unaffected by the framing above it).
+ * Two mirrored open profiles (left, right) — the curve/vert/deck portion of a rib — shared by
+ * the solid wedge and each individual rib. Each sits on top of the bottom transition's own
+ * framing (shifted up by the joist's major dimension, joistDepthMm — that's the height the
+ * bottom transition is built to), and each ends at its own base: a rib stops at the *inside*
+ * face of the bottommost curve joist (see buildHalfPipeJoists), not at that joist's centerline
+ * (the curve's own tangent point) — otherwise the inner half of that joist's thickness would
+ * have no rib sitting on it. It still doesn't bridge across to the other side — that gap is
+ * buildBottomTransitionSlab's job, not the ribs'. The deck-side closing edge still drops to
+ * true y=0 (see decisions.md: it's a rendering convenience, not a structural wall, so it's
+ * unaffected by the framing above it).
  */
-function halfPipeOutline(params: HalfPipeParams): THREE.Shape {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, joistDepthMm } = params;
+function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, joistDepthMm, joistThicknessMm } = params;
   const jointDepth = joistDepthMm / 1000;
   const half = bottomTransitionLength / 2;
+  const joistThickness = joistThicknessMm / 1000;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const left = points.map(([x, y]): [number, number] => [-half - x, y + jointDepth]);
   const right = points.map(([x, y]): [number, number] => [half + x, y + jointDepth]);
 
-  const shape = new THREE.Shape();
-  shape.moveTo(left[left.length - 1][0], 0);
-  for (let i = left.length - 1; i >= 0; i--) shape.lineTo(...left[i]);
-  for (const [x, y] of right) shape.lineTo(x, y);
-  shape.lineTo(right[right.length - 1][0], 0);
-  shape.closePath();
-  return shape;
+  const side = (profile: [number, number][], baseExtension: number): THREE.Shape => {
+    const [tangentX, tangentY] = profile[0]; // bottom corner — the bottommost curve joist's centerline
+    const baseX = tangentX + baseExtension; // that joist's inside face
+    const outerX = profile[profile.length - 1][0]; // deck's outer edge
+    const shape = new THREE.Shape();
+    shape.moveTo(outerX, 0);
+    for (let i = profile.length - 1; i >= 0; i--) shape.lineTo(...profile[i]);
+    shape.lineTo(baseX, tangentY);
+    shape.lineTo(baseX, 0);
+    shape.closePath();
+    return shape;
+  };
+
+  return [side(left, joistThickness / 2), side(right, -joistThickness / 2)];
 }
 
 /**

@@ -1,7 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
-  buildBottomTransitionSlab,
   buildHalfPipeJoists,
   buildHalfPipeRibs,
   HALF_PIPE_DEFAULTS,
@@ -40,9 +39,6 @@ interface RampSpec<P> {
   // Joist/ledger boxes — optional since a ramp type without any bays to bridge would have
   // nothing to build here.
   buildJoists?: (params: P) => THREE.BufferGeometry[];
-  // The bottom transition's own framing, separate from the ribs — optional since a ramp type
-  // without one (e.g. quarter-pipe, once it rejoins) has nothing to build here.
-  buildBottomTransitionSlab?: (params: P) => THREE.BufferGeometry;
   // X positions (in the built geometry's own centered coordinate space) of the coping
   // tubes — the curve/deck lip, not the deck's outer edge. See decisions.md.
   copingXs: (params: P) => number[];
@@ -75,7 +71,6 @@ const RAMPS: Record<RampType, RampSpec<any>> = {
     ],
     buildRibs: (p: HalfPipeParams) => buildHalfPipeRibs(p),
     buildJoists: (p: HalfPipeParams) => buildHalfPipeJoists(p),
-    buildBottomTransitionSlab: (p: HalfPipeParams) => buildBottomTransitionSlab(p),
     copingXs: (p: HalfPipeParams) => halfPipeCopingXs(p),
     footprint: (p: HalfPipeParams) => halfPipeFootprint(p),
     buildDimensions: (p: HalfPipeParams) => buildHalfPipeDimensions(p),
@@ -141,11 +136,6 @@ scene.add(rampGroup);
 const joistMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a876, flatShading: true }); // wood-toned, distinct from the ribs
 const joistGroup = new THREE.Group();
 scene.add(joistGroup);
-
-const bottomTransitionMesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-bottomTransitionMesh.castShadow = true;
-bottomTransitionMesh.receiveShadow = true;
-scene.add(bottomTransitionMesh);
 
 const COPING_RADIUS = 0.03; // ~60mm schedule-40 steel pipe, the standard skate coping stock
 const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.4 });
@@ -283,11 +273,6 @@ function rebuildRamp(type: RampType): void {
     joist.castShadow = true;
     joistGroup.add(joist);
   }
-
-  bottomTransitionMesh.geometry.dispose();
-  const buildSlab = RAMPS[type].buildBottomTransitionSlab;
-  bottomTransitionMesh.visible = Boolean(buildSlab);
-  bottomTransitionMesh.geometry = buildSlab ? buildSlab(currentParams) : new THREE.BufferGeometry();
 
   const deckY = RAMPS[type].footprint(currentParams).height;
   rebuildCoping(type, deckY, currentParams, currentParams.width);

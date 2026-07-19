@@ -62,14 +62,24 @@ the curve/vert/deck portion of each rib up by the `joistDepthMm` slider
 (default 90mm) — the joist's *major* dimension is what now determines this
 height, since that's what physically holds the transition ribs up (see
 "Joists" below); there's no separate thickness control for the bottom
-transition anymore. The deck-side closing edge (the non-structural
-convenience noted below that closes the 2D outline for extrusion) still
-drops to true `y=0`, unaffected. `buildBottomTransitionSlab` renders that
+transition anymore. `halfPipeOutline` returns two mirrored open shapes
+(left, right), not one shape bridging the whole footprint — each rib ends
+at its own base, at the *inside face* of the bottommost curve joist (that
+joist's centerline is the curve's own tangent point; the rib's shelf
+extends `joistThicknessMm/1000 / 2` inward from there, toward the ramp's
+center, before dropping to the ground, so the rib actually covers that
+joist's full footprint instead of stopping at its centerline and leaving
+the inner half exposed), rather than spanning the whole
+`bottomTransitionLength` gap; that gap is `buildBottomTransitionSlab`'s
+job, not the ribs'. The deck-side closing edge (the non-structural
+convenience noted below that closes each 2D shape for extrusion) still
+drops to true `y=0`, unaffected. `buildBottomTransitionSlab` computes that
 framing as a simple box from `y=0` to `y=joistDepthMm/1000`, spanning
-`bottomTransitionLength × width`, so the thickness the ribs meet is
-actually visible (`bottomTransitionMesh` in `main.ts`) rather than an
-invisible gap — screwed to the curved transition sections as its own
-separate construction, not fused with the ribs.
+`bottomTransitionLength × width` — screwed to the curved transition
+sections as its own separate construction, not fused with the ribs. It's
+geometry-only for now: not currently rendered in the scene (it was drawn
+as a plain blue box sharing the rib material, `bottomTransitionMesh` in
+`main.ts`, which was removed pending a better way to show it).
 
 `buildHalfPipeGeometry` (the full-`width` solid wedge) still exists and is
 still tested — a correct, reusable geometry-only function, sharing the same
