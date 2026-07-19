@@ -1,7 +1,8 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
-  buildHalfPipeGeometry,
+  buildHalfPipeFlatBottomSlab,
+  buildHalfPipeRibs,
   HALF_PIPE_DEFAULTS,
   halfPipeCopingXs,
   halfPipeFootprint,
@@ -29,8 +30,13 @@ interface SliderSpec {
 
 interface RampSpec<P> {
   defaults: P;
-  sliders: SliderSpec[];
-  build: (params: P) => THREE.BufferGeometry;
+  ribSliders: SliderSpec[];
+  flatBottomSliders: SliderSpec[];
+  rampSliders: SliderSpec[];
+  buildRibs: (params: P) => THREE.BufferGeometry[];
+  // The flat bottom's own framing, separate from the ribs — optional since a ramp type
+  // without a flat bottom (e.g. quarter-pipe, once it rejoins) has nothing to build here.
+  buildFlatBottomSlab?: (params: P) => THREE.BufferGeometry;
   // X positions (in the built geometry's own centered coordinate space) of the coping
   // tubes — the curve/deck lip, not the deck's outer edge. See decisions.md.
   copingXs: (params: P) => number[];
@@ -42,15 +48,23 @@ interface RampSpec<P> {
 const RAMPS: Record<RampType, RampSpec<any>> = {
   halfPipe: {
     defaults: HALF_PIPE_DEFAULTS,
-    sliders: [
+    ribSliders: [
+      { key: "ribThicknessMm", label: "Rib thickness (mm)", min: 10, max: 40, step: 1 },
+      { key: "internalRibCount", label: "Internal ribs", min: 0, max: 10, step: 1 },
+    ],
+    flatBottomSliders: [
+      { key: "flatBottomLength", label: "Flat bottom length (m)", min: 1, max: 8, step: 0.25 },
+      { key: "flatBottomThicknessMm", label: "Flat bottom thickness (mm)", min: 50, max: 150, step: 1 },
+    ],
+    rampSliders: [
       { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
       { key: "transitionAngleDeg", label: "Transition angle (°)", min: 45, max: 90, step: 1 },
       { key: "vertHeight", label: "Vert extension (m)", min: 0, max: 1, step: 0.05 },
       { key: "deckLength", label: "Deck length (m)", min: 0.3, max: 1.5, step: 0.1 },
-      { key: "flatBottomLength", label: "Flat bottom (m)", min: 1, max: 8, step: 0.25 },
       { key: "width", label: "Width (m)", min: 1, max: 4, step: 0.1 },
     ],
-    build: (p: HalfPipeParams) => buildHalfPipeGeometry(p),
+    buildRibs: (p: HalfPipeParams) => buildHalfPipeRibs(p),
+    buildFlatBottomSlab: (p: HalfPipeParams) => buildHalfPipeFlatBottomSlab(p),
     copingXs: (p: HalfPipeParams) => halfPipeCopingXs(p),
     footprint: (p: HalfPipeParams) => halfPipeFootprint(p),
   },
@@ -62,7 +76,7 @@ const AVAILABLE_SPACE_SLIDERS: SliderSpec[] = [
   { key: "height", label: "Available height (m)", min: 1, max: 4, step: 0.1 },
 ];
 
-// Fits HALF_PIPE_DEFAULTS's footprint (~5.57m / 3m / 0.9m) with length/height to spare.
+// Fits HALF_PIPE_DEFAULTS's footprint (~5.57m / 3m / 0.99m) with length/height to spare.
 // Untyped as Footprint (unlike a ramp's computed footprint) since it's edited as loose
 // slider state via renderSliderList, the same way currentParams is.
 const availableSpace: Record<string, number> = { length: 6, width: 3, height: 2 };
@@ -71,7 +85,9 @@ const viewport = document.getElementById("viewport")!;
 const typeSelect = document.getElementById("type-select") as HTMLSelectElement;
 const spaceSlidersEl = document.getElementById("space-sliders")!;
 const spaceStatusEl = document.getElementById("space-status")!;
-const slidersEl = document.getElementById("sliders")!;
+const ribSlidersEl = document.getElementById("rib-sliders")!;
+const flatBottomSlidersEl = document.getElementById("flat-bottom-sliders")!;
+const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
 
 const scene = new THREE.Scene();
@@ -106,22 +122,25 @@ const material = new THREE.MeshStandardMaterial({
   flatShading: true,
   side: THREE.DoubleSide, // ponytail: sidesteps verifying triangle winding on the hand-built ramp outlines
 });
-const rampMesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
-rampMesh.castShadow = true;
-scene.add(rampMesh);
+const rampGroup = new THREE.Group();
+scene.add(rampGroup);
+
+const slabMesh = new THREE.Mesh(new THREE.BufferGeometry(), material);
+slabMesh.castShadow = true;
+slabMesh.receiveShadow = true;
+scene.add(slabMesh);
 
 const COPING_RADIUS = 0.03; // ~60mm schedule-40 steel pipe, the standard skate coping stock
 const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.4 });
 const copingGroup = new THREE.Group();
 scene.add(copingGroup);
 
-function rebuildCoping(type: RampType, geometry: THREE.BufferGeometry, params: unknown, width: number): void {
+function rebuildCoping(type: RampType, deckY: number, params: unknown, width: number): void {
   for (const child of copingGroup.children) {
     if (child instanceof THREE.Mesh) child.geometry.dispose();
   }
   copingGroup.clear();
 
-  const deckY = geometry.boundingBox!.max.y;
   for (const x of RAMPS[type].copingXs(params)) {
     const tube = new THREE.Mesh(new THREE.CylinderGeometry(COPING_RADIUS, COPING_RADIUS, width, 16), copingMaterial);
     tube.rotation.x = Math.PI / 2; // cylinder's local Y (its length) onto world Z, spanning the ramp's width
@@ -159,10 +178,23 @@ function renderSpaceStatus(type: RampType): void {
 }
 
 function rebuildRamp(type: RampType): void {
-  const geometry = RAMPS[type].build(currentParams);
-  rampMesh.geometry.dispose();
-  rampMesh.geometry = geometry;
-  rebuildCoping(type, geometry, currentParams, currentParams.width);
+  for (const child of rampGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  rampGroup.clear();
+  for (const geometry of RAMPS[type].buildRibs(currentParams)) {
+    const rib = new THREE.Mesh(geometry, material);
+    rib.castShadow = true;
+    rampGroup.add(rib);
+  }
+
+  slabMesh.geometry.dispose();
+  const buildSlab = RAMPS[type].buildFlatBottomSlab;
+  slabMesh.visible = Boolean(buildSlab);
+  slabMesh.geometry = buildSlab ? buildSlab(currentParams) : new THREE.BufferGeometry();
+
+  const deckY = RAMPS[type].footprint(currentParams).height;
+  rebuildCoping(type, deckY, currentParams, currentParams.width);
   renderSpaceStatus(type);
 }
 
@@ -195,16 +227,22 @@ function renderSliderList(container: HTMLElement, specs: SliderSpec[], state: Re
   }
 }
 
+function renderAllSliderGroups(type: RampType): void {
+  renderSliderList(ribSlidersEl, RAMPS[type].ribSliders, currentParams, () => rebuildRamp(type));
+  renderSliderList(flatBottomSlidersEl, RAMPS[type].flatBottomSliders, currentParams, () => rebuildRamp(type));
+  renderSliderList(rampSlidersEl, RAMPS[type].rampSliders, currentParams, () => rebuildRamp(type));
+}
+
 function selectType(type: RampType): void {
   currentParams = { ...RAMPS[type].defaults };
-  renderSliderList(slidersEl, RAMPS[type].sliders, currentParams, () => rebuildRamp(type));
+  renderAllSliderGroups(type);
   rebuildRamp(type);
 }
 
 function resetParams(): void {
   const type = typeSelect.value as RampType;
   currentParams = { ...RAMPS[type].defaults };
-  renderSliderList(slidersEl, RAMPS[type].sliders, currentParams, () => rebuildRamp(type));
+  renderAllSliderGroups(type);
   rebuildRamp(type);
 }
 

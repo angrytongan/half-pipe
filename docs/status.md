@@ -27,6 +27,49 @@ on X/Z via bounding box, leaves Y untouched so the base sits at 0.
 A "Reset to defaults" button (`#reset-btn`) below the sliders re-applies the
 current type's defaults.
 
+## Structure
+
+The half-pipe renders as its rib/transom skeleton, not a solid wedge: one
+thin extrusion of the transition profile per rib, evenly spaced across
+`width`, instead of one full-`width` extrusion. `src/ramps/halfPipe.ts`'s
+`buildHalfPipeRibs` extracts the shared cross-section (`halfPipeOutline`,
+module-private) and passes it through `src/ramps/ribs.ts`'s `extrudeRibs`
+at the Z positions from `ribZPositions`. Rib count: there are always
+exactly two edge ribs (mandatory — nothing else frames the deck edge),
+plus however many internal ribs the `internalRibCount` slider says (default
+1, range 0–10) — ribs here support the cross members and define the
+transition arc for the skin, not the skin directly, so they're sparse by
+default rather than closely spaced; `ribZPositions(width, internalRibCount)`
+returns `internalRibCount + 2` positions evenly spaced from edge to edge,
+no spacing distance involved. Rib thickness is the `ribThicknessMm` slider
+(default 19mm / 3/4" ply, per `research/design.md`'s "Ribs/transoms"),
+stored/displayed in millimetres since that's the natural unit for a
+plywood thickness — converted to meters only where it feeds
+`THREE.ExtrudeGeometry`. `ribs.ts`'s `RIB_THICKNESS_MM` is the constant
+this slider default comes from — `ribZPositions`/`extrudeRibs` themselves
+take count/thickness as parameters, not module constants, so they're fully
+driven by the sliders. `src/main.ts` renders one `THREE.Mesh` per rib
+geometry inside a `THREE.Group` (`rampGroup`), sharing the existing ramp
+material.
+
+The transition curve's bottom tangent point sits on top of the flat
+bottom's own framing, not on the raw ground: `halfPipeOutline` shifts the
+curve/vert/deck portion of each rib up by the `flatBottomThicknessMm`
+slider (default 90mm, a round number close to a 2x4's actual depth per
+`research/design.md`'s cited "38×89mm nominal" — also millimetres, same
+reasoning as rib thickness). The deck-side closing edge (the non-structural convenience
+noted below that closes the 2D outline for extrusion) still drops to true
+`y=0`, unaffected. `buildHalfPipeFlatBottomSlab` renders that framing as a
+simple box from `y=0` to `y=flatBottomThicknessMm/1000`, spanning
+`flatBottomLength × width`, so the thickness the ribs meet is actually
+visible (`slabMesh` in `main.ts`) rather than an invisible gap.
+
+`buildHalfPipeGeometry` (the full-`width` solid wedge) still exists and is
+still tested — a correct, reusable geometry-only function, sharing the same
+`halfPipeOutline` so it never drifts from the ribs — but is no longer what's
+rendered in the scene. Ledgers, bracing, and skin are separate, not-yet-built
+backlog items (see features.md).
+
 ## Scene
 
 `src/main.ts`: `PerspectiveCamera` + `OrbitControls` (no damping), ambient +
@@ -40,21 +83,28 @@ box — see decisions.md for why. Quarter-pipe gets one, half-pipe gets two.
 
 `index.html` layout: an `.app-header` (skateboard icon, title, "in
 development" pill, GitHub link) matching `obstacle`'s header, above an
-`.app` flex row holding the `#panel` (available-space block, type select,
-sliders) and `#viewport` (3D view) cards. No method-select/BOM/tooltip UI
-this round — see features.md.
+`.app` flex row holding the `#panel` (type select at the top, the
+always-visible space-status pills below it, then a divider, then an
+accordion of four independently-collapsible sections — Available space,
+Ribs, Flat bottom, Ramp parameters, each a plain native
+`<details>`/`<summary>` so no JS is needed — then the reset button) and
+`#viewport` (3D view) cards. No method-select/BOM/tooltip UI this round —
+see features.md.
 
 ## Available space
 
-`#space` in `index.html`, above the type-select — three sliders (available
-length/width/height, `AVAILABLE_SPACE_SLIDERS` in `src/main.ts`) plus a row
-of status pills (`#space-status`) comparing them against
-`halfPipeFootprint(currentParams)` on every render: green "7.80m / 8.00m"
-when it fits, red "17.20m / 8.00m — over by 9.20m" when it doesn't. Doesn't
-block rendering either way — see decisions.md. `renderSliderList` in
-`src/main.ts` is the slider-row builder shared between this and the
-per-ramp-type sliders (factored out of what was previously
-`renderSliders`).
+Split across two places in `index.html` so the warning can't be hidden by
+collapsing a section: a row of status pills (`#space-status`), comparing
+the three sliders below against `halfPipeFootprint(currentParams)` on
+every render, sits directly under the type select — always visible,
+outside any `<details>` — green "7.80m / 8.00m" when it fits, red
+"17.20m / 8.00m — over by 9.20m" when it doesn't. Doesn't block rendering
+either way — see decisions.md. The three sliders themselves (available
+length/width/height, `AVAILABLE_SPACE_SLIDERS` in `src/main.ts`) live in
+the collapsible "Available space" accordion section below it.
+`renderSliderList` in `src/main.ts` is the slider-row builder shared
+between this and the per-ramp-type sliders (factored out of what was
+previously `renderSliders`).
 
 ## Deployment
 

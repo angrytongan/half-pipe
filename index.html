@@ -76,7 +76,10 @@
       #type-select {
         width: 100%;
         padding: 0.4rem;
-        margin-bottom: 1rem;
+        margin-bottom: 0.75rem;
+      }
+      .panel-divider {
+        border-bottom: 1px solid #8884;
       }
       .slider-row {
         margin-bottom: 0.9rem;
@@ -96,20 +99,26 @@
         margin-bottom: 1rem;
         cursor: pointer;
       }
-      #space {
-        margin-bottom: 1.5rem;
-        padding-bottom: 1rem;
+      #panel details {
+        padding: 0.75rem 0;
         border-bottom: 1px solid #8884;
       }
-      #space h2 {
+      #panel details:last-of-type {
+        border-bottom: none;
+      }
+      #panel summary {
         font-size: 0.85rem;
-        margin: 0 0 0.75rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #panel details[open] summary {
+        margin-bottom: 0.75rem;
       }
       #space-status {
         display: flex;
         flex-wrap: wrap;
         gap: 0.3rem;
-        margin-top: 0.75rem;
+        margin-bottom: 0.75rem;
       }
       .space-status {
         padding: 0.15rem 0.5rem;
@@ -159,15 +168,27 @@
     </header>
     <div class="app">
       <div id="panel">
-        <div id="space">
-          <h2>Available space</h2>
-          <div id="space-sliders"></div>
-          <div id="space-status"></div>
-        </div>
         <select id="type-select">
           <option value="halfPipe">Half-pipe</option>
         </select>
-        <div id="sliders"></div>
+        <div id="space-status"></div>
+        <div class="panel-divider"></div>
+        <details open>
+          <summary>Available space</summary>
+          <div id="space-sliders"></div>
+        </details>
+        <details>
+          <summary>Ramp parameters</summary>
+          <div id="ramp-sliders"></div>
+        </details>
+        <details>
+          <summary>Ribs</summary>
+          <div id="rib-sliders"></div>
+        </details>
+        <details>
+          <summary>Flat bottom</summary>
+          <div id="flat-bottom-sliders"></div>
+        </details>
         <button type="button" id="reset-btn">Reset to defaults</button>
       </div>
       <div id="viewport"></div>
