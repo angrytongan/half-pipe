@@ -19,10 +19,10 @@ export interface HalfPipeParams {
 
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   radius: 1.8,
-  transitionAngleDeg: 60,
+  transitionAngleDeg: 57,
   vertHeight: 0,
-  deckLength: 0.6,
-  bottomTransitionLength: 1.25,
+  deckLength: 0.3,
+  bottomTransitionLength: 2.25,
   width: 3,
   ribThicknessMm: RIB_THICKNESS_MM,
   internalRibCount: 1,
