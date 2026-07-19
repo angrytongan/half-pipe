@@ -84,7 +84,7 @@ lines, an offset dimension line with arrowheads, and returns a label position; `
 copies `../obstacle`'s canvas-texture label-sprite approach (`createLabelSprite`) to render
 the text, camera-facing, with no separate DOM overlay to get out of sync.
 
-`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes four dimensions
+`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes five dimensions
 analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingXs` —
 no need to build the actual rib geometry just to measure it), all anchored to one edge rib
 since every rib is an identical copy of the others:
@@ -102,7 +102,16 @@ since every rib is an identical copy of the others:
 - **Rib spacing** — the gap between the first two
   `ribZPositions(width, internalRibCount, ribThickness)` entries: the left edge rib and the
   near rib of the first doubled seam (or, at `internalRibCount: 0`, the two edge ribs
-  themselves) — i.e. the actual usable section width, offset to the side (+X) at deck height.
+  themselves), offset to the side (+X) at deck height. Measured **inside surface to inside
+  surface** (`centerToCenterGap - ribThickness`), not centerline to centerline — every rib's
+  own Z position is its *center* (see `ribZPositions`), so each one eats half its own
+  thickness into this gap; the raw centerline gap overstates the section's actual clear span.
+- **Width** — offset to the *opposite* side (−X) from the rib-spacing dimension, at the left
+  deck edge (ground level), so it doesn't share the rib-spacing dimension's anchor or offset
+  axis either. Measured **outside surface to outside surface** (`width + ribThickness`), not
+  centerline to centerline, for the same reason in reverse — each edge rib sticks out half
+  its own thickness beyond `±width/2`, so the true overall footprint is one full rib
+  thickness more than the `width` param itself.
 
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.

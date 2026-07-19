@@ -32,7 +32,9 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
   const halfFlatBottom = flatBottomLength / 2;
   const flatBottomY = flatBottomThicknessMm / 1000;
   const halfWidth = width / 2;
-  const [gapStartZ, gapEndZ] = ribZPositions(width, internalRibCount, ribThicknessMm / 1000);
+  const ribThickness = ribThicknessMm / 1000;
+  const halfRibThickness = ribThickness / 2;
+  const [gapStartZ, gapEndZ] = ribZPositions(width, internalRibCount, ribThickness);
 
   const heightDim = buildLinearDimension(
     new THREE.Vector3(-halfLength, 0, -halfWidth),
@@ -54,10 +56,23 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     new THREE.Vector3(0, 0, 1),
     OFFSET_DISTANCE,
   );
+  // Inside surface to inside surface, not centerline to centerline — the clear span a
+  // builder actually has to work with, so pulled in by half a rib thickness on each side.
   const spacingDim = buildLinearDimension(
-    new THREE.Vector3(halfLength, height, gapStartZ),
-    new THREE.Vector3(halfLength, height, gapEndZ),
+    new THREE.Vector3(halfLength, height, gapStartZ + halfRibThickness),
+    new THREE.Vector3(halfLength, height, gapEndZ - halfRibThickness),
     new THREE.Vector3(1, 0, 0),
+    OFFSET_DISTANCE,
+  );
+  // Offset in -X (opposite side from the rib-spacing dimension's +X) at the left deck edge —
+  // a distinct anchor and offset axis from every other dimension here, not just a different
+  // offset distance or Y-level, for the same depthTest:false reason noted above.
+  // Outside surface to outside surface, not centerline to centerline — the true overall
+  // footprint, so pushed out by half a rib thickness on each side.
+  const widthDim = buildLinearDimension(
+    new THREE.Vector3(-halfLength, 0, -halfWidth - halfRibThickness),
+    new THREE.Vector3(-halfLength, 0, halfWidth + halfRibThickness),
+    new THREE.Vector3(-1, 0, 0),
     OFFSET_DISTANCE,
   );
 
@@ -65,6 +80,7 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     { ...heightDim, text: formatMeters(height) },
     { ...lengthDim, text: formatMeters(length) },
     { ...flatBottomDim, text: formatMeters(flatBottomLength) },
-    { ...spacingDim, text: formatMeters(gapEndZ - gapStartZ) },
+    { ...spacingDim, text: formatMeters(gapEndZ - gapStartZ - ribThickness) },
+    { ...widthDim, text: formatMeters(width + ribThickness) },
   ];
 }
