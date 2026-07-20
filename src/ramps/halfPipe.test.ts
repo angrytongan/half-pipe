@@ -10,7 +10,6 @@ import {
   HALF_PIPE_DEFAULTS,
 } from "./halfPipe";
 import { ribZPositions } from "./ribs";
-import { CURVE_JOIST_SPACING_M } from "./joists";
 import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
 import { copingNotch } from "./coping";
 
@@ -231,11 +230,8 @@ describe("buildBottomTransitionFrame", () => {
 
 describe("buildHalfPipeJoists", () => {
   it("produces the expected number of joists at defaults", () => {
-    const { radius, transitionAngleDeg, internalRibCount } = HALF_PIPE_DEFAULTS;
-    const curveArcLength = (radius * transitionAngleDeg * Math.PI) / 180;
-    const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
-    const curveInteriorCount = curveSegments - 1;
-    const pointsPerSide = curveInteriorCount + 2; // bottom corner, curve interior, floor-section end — no deck/curve-corner joist (see features.md)
+    const { internalRibCount, internalCurveJoistCount } = HALF_PIPE_DEFAULTS;
+    const pointsPerSide = internalCurveJoistCount + 3; // bottom corner, curve interior, notch-shelf, floor-section end
     const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
     const sections = internalRibCount + 1;
 
@@ -247,6 +243,20 @@ describe("buildHalfPipeJoists", () => {
     const more = buildHalfPipeJoists({ ...HALF_PIPE_DEFAULTS, internalRibCount: 2 });
     const perSection = base.length / 2; // internalRibCount 1 => 2 sections
     expect(more.length - base.length).toBe(perSection);
+  });
+
+  it("adds exactly two joists per side (both sections) per extra internal curve joist", () => {
+    const base = buildHalfPipeJoists({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 3 });
+    const more = buildHalfPipeJoists({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 4 });
+    const sections = HALF_PIPE_DEFAULTS.internalRibCount + 1;
+    expect(more.length - base.length).toBe(2 * sections); // both sides
+  });
+
+  it("still builds only the bottom-corner, notch-shelf, and deck-outer landmarks when internalCurveJoistCount is 0", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 };
+    const sections = params.internalRibCount + 1;
+    const pointsPerSide = 3; // bottom corner, notch-shelf, floor-section end — no curve interior
+    expect(buildHalfPipeJoists(params)).toHaveLength(2 * pointsPerSide * sections);
   });
 
   it("spans between the ribs' inside faces, not their centerlines, for every joist — never the seam's own internal gap", () => {
@@ -297,8 +307,7 @@ describe("buildHalfPipeJoists", () => {
     const jointDepth = params.joistDepthMm / 1000;
     const sweep = (params.transitionAngleDeg * Math.PI) / 180;
 
-    const curveArcLength = params.radius * sweep;
-    const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
+    const curveSegments = params.internalCurveJoistCount + 1;
     const curveInteriorPoints = transitionArcPoints(params.radius, params.transitionAngleDeg, curveSegments).slice(1, -1);
     const lastInteriorIndex = curveInteriorPoints.length - 1;
     const [localX, localY] = curveInteriorPoints[lastInteriorIndex];
@@ -327,6 +336,81 @@ describe("buildHalfPipeJoists", () => {
     const box = curveJoist!.boundingBox!;
     expect(box.max.x - box.min.x).toBeCloseTo(expectedX, 5);
     expect(box.max.y - box.min.y).toBeCloseTo(expectedY, 5);
+  });
+
+  it("anchors the topmost curve joist at the coping notch's own shelf point, tilted to match", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const thickness = params.joistThicknessMm / 1000;
+    const depth = params.joistDepthMm / 1000;
+    const jointDepth = params.joistDepthMm / 1000;
+    const half = params.bottomTransitionLength / 2;
+
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const angle = notch.shelfAngle;
+    // Inset backward along the tangent by half the thickness — see buildHalfPipeJoists — so the
+    // *notch-side* corner, not the center, lands on shelfEnd.
+    const localX = notch.shelfEnd[0] - (thickness / 2) * Math.cos(angle);
+    const localY = notch.shelfEnd[1] - (thickness / 2) * Math.sin(angle);
+
+    const expectedX = thickness * Math.abs(Math.cos(angle)) + depth * Math.abs(Math.sin(angle));
+    const expectedY = thickness * Math.abs(Math.sin(angle)) + depth * Math.abs(Math.cos(angle));
+
+    for (const mirror of [1, -1]) {
+      const worldX = mirror * (half + localX);
+      const worldY = localY + jointDepth;
+      const jointAngle = mirror * angle;
+      const expectedCenterX = worldX + Math.sin(jointAngle) * (depth / 2);
+      const expectedCenterY = worldY - Math.cos(jointAngle) * (depth / 2);
+
+      const shelfJoist = buildHalfPipeJoists(params).find((joist) => {
+        joist.computeBoundingBox();
+        const box = joist.boundingBox!;
+        const x = (box.min.x + box.max.x) / 2;
+        const y = (box.min.y + box.max.y) / 2;
+        return Math.abs(x - expectedCenterX) < 1e-6 && Math.abs(y - expectedCenterY) < 1e-6;
+      });
+
+      expect(shelfJoist).toBeDefined();
+      const box = shelfJoist!.boundingBox!;
+      expect(box.max.x - box.min.x).toBeCloseTo(expectedX, 5);
+      expect(box.max.y - box.min.y).toBeCloseTo(expectedY, 5);
+    }
+  });
+
+  it("lands the topmost curve joist's notch-side top corner exactly on the coping notch's shelfEnd", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const jointDepth = params.joistDepthMm / 1000;
+    const half = params.bottomTransitionLength / 2;
+
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const [shelfX, shelfY] = notch.shelfEnd;
+    const worldY = shelfY + jointDepth;
+
+    const joists = buildHalfPipeJoists(params);
+    for (const worldX of [half + shelfX, -(half + shelfX)]) {
+      const hasVertexAtCorner = joists.some((joist) => {
+        const position = joist.getAttribute("position");
+        for (let i = 0; i < position.count; i++) {
+          if (Math.abs(position.getX(i) - worldX) < 1e-6 && Math.abs(position.getY(i) - worldY) < 1e-6) return true;
+        }
+        return false;
+      });
+      expect(hasVertexAtCorner).toBe(true);
+    }
   });
 
   it("no longer includes a joist at the deck/curve corner (deck start) — it intersected the deck; see features.md", () => {

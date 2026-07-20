@@ -2,6 +2,7 @@ export interface CopingNotch {
   wallTop: [number, number];
   wallBottom: [number, number];
   shelfEnd: [number, number];
+  shelfAngle: number;
   arcCutoffIndex: number;
   pipeCenter: [number, number];
 }
@@ -46,6 +47,7 @@ export function copingNotch(
     wallTop: [wallX, cornerY],
     wallBottom: [wallX, shelfY],
     shelfEnd: [shelfEndX, shelfY],
+    shelfAngle: t, // the arc parameter t doubles as its own tangent angle — see transitionArcPoints
     arcCutoffIndex,
     pipeCenter: [pipeCenterX, pipeCenterY],
   };

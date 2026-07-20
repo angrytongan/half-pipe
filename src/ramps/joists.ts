@@ -7,10 +7,6 @@ export const JOIST_THICKNESS_MM = 45;
 // vertically ("major length vertical"); also what determines the bottom-transition height.
 export const JOIST_DEPTH_MM = 90;
 
-// ponytail: rounded from research/design.md's cited ~203mm rib/ledger spacing, for
-// construction ease (a round 200mm tape measurement instead of 8" converted to metric).
-export const CURVE_JOIST_SPACING_M = 0.2;
-
 /**
  * One joist: thickness (X) x depth (Y) cross-section, spanning Z from zStart to zEnd. "Major
  * length vertical" — depth is the Y (vertical) extent, thickness the X (horizontal, along the

@@ -55,6 +55,7 @@ const RAMP: RampSpec = {
   joistSliders: [
     { key: "joistThicknessMm", label: "Joist thickness (mm)", min: 20, max: 70, step: 1 },
     { key: "joistDepthMm", label: "Joist depth (mm)", min: 45, max: 190, step: 1 },
+    { key: "internalCurveJoistCount", label: "Internal curve joists", min: 0, max: 30, step: 1 },
   ],
   bottomTransitionSliders: [
     { key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.25 },

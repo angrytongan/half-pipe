@@ -18,16 +18,6 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Joists
 
-- [ ] A correctly-placed joist at the deck/curve corner (deck start).
-      `buildHalfPipeJoists` (`src/ramps/halfPipe.ts`) dropped this landmark
-      entirely — tilted to the curve's own tangent there while anchored
-      exactly where the flat deck begins, its top face rose above the deck
-      surface on the deck side of its own centerline, physically
-      intersecting the deck it's supposed to sit under. The corner still
-      needs *some* joist (the deck and the topmost curve-interior joist
-      currently have a gap between them there); it just needs the right
-      shape/orientation, not the curve's tilted cross-section carried
-      straight through the corner.
 - [ ] A joist needs to be present between two ribs at the bottom rear corner of each rib
       at ground level.
 - [ ] A joist needs to be present at the half-way point of the width of the rib
@@ -45,10 +35,3 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       surface will actually sit, since that surface doesn't exist yet.
       The horizontal cut (shelf) is confirmed correct as-is; only the
       vertical cut needs revisiting once the ramp surface is modeled.
-
-## Ramps
-
-- [ ] Width taper — no request for this; real ramps are typically constant
-      width.
-- [ ] Asymmetric half-pipe (independent radius/angle per side) — no request
-      for this either.
