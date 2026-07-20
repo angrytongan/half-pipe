@@ -41,7 +41,10 @@ edge), plus however many *seams* the `internalRibCount` slider says
 straddling its boundary point, touching face to face (offset by
 ±half the rib thickness, zero gap) rather than one shared rib — a wide
 ramp is built as separate narrower sections, each with its own edge rib at
-the seam, then screwed together, not as one continuous rib run.
+the seam, then screwed together, not as one continuous rib run. The two
+edge ribs are inset by `ribThickness/2` from `±width/2` — their *outer*
+faces meet `±width/2`, not their centerlines — so the whole assembled
+structure fits exactly within `width`, with no overhang past it.
 `ribZPositions(width, internalRibCount, ribThickness)` returns
 `internalRibCount * 2 + 2` positions; the rib-spacing dimension (see
 below) ends up measuring the actual usable section width — a little under
@@ -85,9 +88,10 @@ inset by half the last curve joist's own thickness on each end (see
 Joists below) so they butt up against that joist's inner face instead of
 reaching into its midpoint, since that joist is centered exactly at
 `bottomTransitionLength / 2` — and are positioned so their *outer* faces
-exactly meet the outside faces of the edge ribs
-(`width/2 + ribThicknessMm/1000/2`) — that's the wall's "height", lying
-flat instead of standing up. `internalStudCount + 2` **studs** (two
+exactly meet the outside faces of the edge ribs, at `±width/2` (edge ribs
+are inset — see Ribs above — so the structure fits within `width` with no
+overhang) — that's the wall's "height", lying flat instead of standing
+up. `internalStudCount + 2` **studs** (two
 mandatory end studs plus the slider count, same `internalRibCount`
 convention) then span between the plates' *inside* faces, evenly spaced
 along the (now shorter) plate length and inset so the end studs' outer
@@ -187,10 +191,9 @@ since every rib is an identical copy of the others:
   thickness into this gap; the raw centerline gap overstates the section's actual clear span.
 - **Width** — offset to the *opposite* side (−X) from the rib-spacing dimension, at the left
   deck edge (ground level), so it doesn't share the rib-spacing dimension's anchor or offset
-  axis either. Measured **outside surface to outside surface** (`width + ribThickness`), not
-  centerline to centerline, for the same reason in reverse — each edge rib sticks out half
-  its own thickness beyond `±width/2`, so the true overall footprint is one full rib
-  thickness more than the `width` param itself.
+  axis either. Measured **outside surface to outside surface**, which is exactly `±width/2` —
+  the edge ribs are inset (see Ribs above), so the true overall footprint is exactly the
+  `width` param itself, with no overhang.
 
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.
@@ -230,6 +233,11 @@ the collapsible "Available space" accordion section below it.
 `renderSliderList` in `src/main.ts` is the slider-row builder shared
 between this and the per-ramp-type sliders (factored out of what was
 previously `renderSliders`).
+
+`halfPipeFootprint`'s `width` is the raw `width` param directly — the
+edge ribs are inset (see Ribs above) so the whole assembled structure
+fits exactly within `width`, with no overhang, so the raw param alone
+already matches what's actually rendered.
 
 ## Deployment
 

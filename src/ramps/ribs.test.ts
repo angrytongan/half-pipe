@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { extrudeRibs, ribZPositions } from "./ribs";
 
 describe("ribZPositions", () => {
-  it("places the first and last rib exactly at the edges, regardless of ribThickness", () => {
+  it("insets the first and last rib's centerline by ribThickness/2, so their outer faces (not centerlines) sit at the edges", () => {
     const positions = ribZPositions(3, 1, 0.02);
-    expect(positions[0]).toBeCloseTo(-1.5, 10);
-    expect(positions[positions.length - 1]).toBeCloseTo(1.5, 10);
+    expect(positions[0]).toBeCloseTo(-1.5 + 0.01, 10);
+    expect(positions[positions.length - 1]).toBeCloseTo(1.5 - 0.01, 10);
   });
 
   it("returns 2 edge ribs plus 2 per seam (internalRibCount)", () => {
@@ -31,9 +31,11 @@ describe("ribZPositions", () => {
     expect(positions).toHaveLength(6); // 2 edges + 2 doubled seams
   });
 
-  it("returns just the two edge ribs when internalRibCount is 0, unaffected by ribThickness", () => {
+  it("returns just the two edge ribs when internalRibCount is 0, each inset by half its own thickness", () => {
     const positions = ribZPositions(0.05, 0, 0.02);
-    expect(positions).toEqual([-0.025, 0.025]);
+    expect(positions).toHaveLength(2);
+    expect(positions[0]).toBeCloseTo(-0.015, 10);
+    expect(positions[1]).toBeCloseTo(0.015, 10);
   });
 
   it("produces more ribs as internalRibCount grows, for the same width", () => {

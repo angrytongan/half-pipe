@@ -67,11 +67,11 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
   // Offset in -X (opposite side from the rib-spacing dimension's +X) at the left deck edge —
   // a distinct anchor and offset axis from every other dimension here, not just a different
   // offset distance or Y-level, for the same depthTest:false reason noted above.
-  // Outside surface to outside surface, not centerline to centerline — the true overall
-  // footprint, so pushed out by half a rib thickness on each side.
+  // Outside surface to outside surface, which is just ±width/2 — the edge ribs are inset (see
+  // ribZPositions) so the true overall footprint is exactly the width param, no overhang.
   const widthDim = buildLinearDimension(
-    new THREE.Vector3(-halfLength, 0, -halfWidth - halfRibThickness),
-    new THREE.Vector3(-halfLength, 0, halfWidth + halfRibThickness),
+    new THREE.Vector3(-halfLength, 0, -halfWidth),
+    new THREE.Vector3(-halfLength, 0, halfWidth),
     new THREE.Vector3(-1, 0, 0),
     OFFSET_DISTANCE,
   );
@@ -81,6 +81,6 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     { ...lengthDim, text: formatMeters(length) },
     { ...bottomTransitionDim, text: formatMeters(bottomTransitionLength) },
     { ...spacingDim, text: formatMeters(gapEndZ - gapStartZ - ribThickness) },
-    { ...widthDim, text: formatMeters(width + ribThickness) },
+    { ...widthDim, text: formatMeters(width) },
   ];
 }

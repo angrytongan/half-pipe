@@ -9,15 +9,20 @@ export const RIB_THICKNESS_MM = 10;
  * nothing else frames the deck edge), plus internalRibCount seams between them. Each seam is
  * doubled into two ribs straddling its boundary point, offset by ±ribThickness/2 so their
  * faces touch — a wide ramp is built as separate narrower sections, each with its own edge
- * rib at the seam, screwed together, not as one rib shared between two sections.
+ * rib at the seam, screwed together, not as one rib shared between two sections. The two edge
+ * ribs are inset by ribThickness/2 from ±width/2 — their *outer* faces meet ±width/2, not
+ * their centerlines — so the whole assembled structure fits exactly within width, with no
+ * overhang past the specified width.
  */
 export function ribZPositions(width: number, internalRibCount: number, ribThickness: number): number[] {
   const boundaryCount = internalRibCount + 2;
   const positions: number[] = [];
   for (let i = 0; i < boundaryCount; i++) {
     const z = -width / 2 + (width * i) / (boundaryCount - 1);
-    if (i === 0 || i === boundaryCount - 1) {
-      positions.push(z);
+    if (i === 0) {
+      positions.push(z + ribThickness / 2);
+    } else if (i === boundaryCount - 1) {
+      positions.push(z - ribThickness / 2);
     } else {
       positions.push(z - ribThickness / 2, z + ribThickness / 2);
     }

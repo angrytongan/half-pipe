@@ -97,8 +97,10 @@ export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[
  * piece a quarter-pipe alone doesn't have). Two plates run almost the full bottomTransitionLength
  * — inset by half the last curve joist's own thickness on each end (see buildHalfPipeJoists) so
  * they butt up against that joist's inner face instead of reaching into its midpoint — and are
- * positioned so their *outer* faces exactly meet the outside faces of the edge ribs (the wall's
- * "height", lying flat instead of standing up). `internalStudCount + 2` studs (two mandatory
+ * positioned so their *outer* faces exactly meet the outside faces of the edge ribs, at
+ * `±width/2` (see ribZPositions: edge ribs are inset so the whole structure fits within width,
+ * with no overhang) — that's the wall's "height", lying flat instead of standing up.
+ * `internalStudCount + 2` studs (two mandatory
  * end studs, same convention as internalRibCount) then span between the plates' *inside* faces,
  * evenly spaced along the (now shorter) plate length, inset so their outer faces sit flush with
  * the plate ends. Cross-section for both plates and studs reuses joistThicknessMm/joistDepthMm —
@@ -107,11 +109,10 @@ export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[
  * members.
  */
 export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const { bottomTransitionLength, joistDepthMm, joistThicknessMm, width, ribThicknessMm, internalStudCount } = params;
+  const { bottomTransitionLength, joistDepthMm, joistThicknessMm, width, internalStudCount } = params;
   const jointDepth = joistDepthMm / 1000;
   const thickness = joistThicknessMm / 1000;
-  const ribThickness = ribThicknessMm / 1000;
-  const outsideZ = width / 2 + ribThickness / 2; // the outside face of each edge rib
+  const outsideZ = width / 2; // the outside face of each edge rib
 
   const member = (spanZ: boolean, span: number, x: number, z: number): THREE.BufferGeometry => {
     const geometry = spanZ ? new THREE.BoxGeometry(thickness, jointDepth, span) : new THREE.BoxGeometry(span, jointDepth, thickness);
@@ -208,7 +209,10 @@ export function halfPipeCopingXs(params: HalfPipeParams): [number, number] {
  * computed analytically from the same transitionAndDeckPoints used to build
  * the geometry, so it can't drift from what's actually rendered. Cheap
  * enough to call on every param change for space-constraint validation
- * without building a BufferGeometry just to measure it.
+ * without building a BufferGeometry just to measure it. Width is the raw
+ * width param directly — the edge ribs are inset (see ribZPositions) so
+ * the whole assembled structure fits exactly within width, with no
+ * overhang past it.
  */
 export function halfPipeFootprint(params: HalfPipeParams): { length: number; width: number; height: number } {
   const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, joistDepthMm } = params;

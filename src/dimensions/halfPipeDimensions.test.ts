@@ -10,21 +10,22 @@ describe("buildHalfPipeDimensions", () => {
     // height: radius * (1 - cos(57deg)) + joistDepthMm/1000 = 0.8196... + 0.09
     // length: bottomTransitionLength + 2 * (radius * sin(57deg) + deckLength)
     // bottom transition: bottomTransitionLength itself
-    // spacing: inside surface to inside surface, not centerline — the centerline gap
-    // (edge rib to the near rib of the doubled seam, 1.495m) minus one full rib thickness
-    // (ribThicknessMm/1000 = 0.01m), since each rib eats half its own thickness into the gap
-    // width: outside surface to outside surface, not centerline — the width param plus one
-    // full rib thickness, since each edge rib sticks out half its own thickness beyond width/2
-    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.49m", "3.01m"]);
+    // spacing: inside surface to inside surface, not centerline — the centerline gap (edge rib
+    // to the near rib of the doubled seam, 1.49m — the edge rib is itself inset half its own
+    // thickness in from width/2) minus one full rib thickness (ribThicknessMm/1000 = 0.01m),
+    // since each rib eats half its own thickness into the gap
+    // width: outside surface to outside surface, which is exactly the width param — the edge
+    // ribs are inset (see ribZPositions) so the structure has no overhang past it
+    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.48m", "3.00m"]);
   });
 
-  it("computes width as the centerline width plus one rib thickness, and rib spacing as the centerline gap minus one rib thickness", () => {
+  it("computes width as exactly the width param (edge ribs are inset, no overhang), and rib spacing as the centerline gap minus one rib thickness", () => {
     const params = { ...HALF_PIPE_DEFAULTS, width: 3.5, ribThicknessMm: 25 };
     const ribThickness = params.ribThicknessMm / 1000;
     const dims = buildHalfPipeDimensions(params);
 
     const widthValue = Number(dims[4].text.replace("m", ""));
-    expect(widthValue).toBe(Number((params.width + ribThickness).toFixed(2)));
+    expect(widthValue).toBe(Number(params.width.toFixed(2)));
 
     const positions = ribZPositions(params.width, params.internalRibCount, ribThickness);
     const centerToCenterGap = positions[1] - positions[0];
@@ -46,9 +47,9 @@ describe("buildHalfPipeDimensions", () => {
     expect(spacingOf(more)).toBeLessThan(spacingOf(fewer));
   });
 
-  it("measures rib spacing as the width minus one rib thickness when there are no internal ribs", () => {
+  it("measures rib spacing as the width minus two rib thicknesses when there are no internal ribs (both edge ribs are now fully inset)", () => {
     const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0, width: 2.4 });
-    expect(dims[3].text).toBe("2.39m"); // 2.4 - 0.01 (default ribThicknessMm 10)
+    expect(dims[3].text).toBe("2.38m"); // 2.4 - 2 * 0.01 (default ribThicknessMm 10)
   });
 
   it("relabels the bottom transition length dimension as bottomTransitionLength changes", () => {
@@ -72,7 +73,7 @@ describe("buildHalfPipeDimensions", () => {
 
   it("relabels the width dimension as width changes", () => {
     const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, width: 4 });
-    expect(dims[4].text).toBe("4.01m"); // 4 + 0.01 (default ribThicknessMm 10)
+    expect(dims[4].text).toBe("4.00m");
   });
 
   it("places the width dimension on the opposite X side from the rib-spacing dimension, at a distinct anchor from every other dimension", () => {

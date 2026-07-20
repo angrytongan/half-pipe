@@ -146,7 +146,7 @@ describe("buildBottomTransitionFrame", () => {
     expect(many.length - few.length).toBe(5);
   });
 
-  it("spans joistDepth x (width + ribThickness) exactly, and bottomTransitionLength minus the last curve joist's thickness — butting up against it, not into its midpoint", () => {
+  it("spans joistDepth x width exactly (no overhang), and bottomTransitionLength minus the last curve joist's thickness — butting up against it, not into its midpoint", () => {
     const params = { ...HALF_PIPE_DEFAULTS, bottomTransitionLength: 2, width: 3, joistDepthMm: 100, ribThicknessMm: 20, joistThicknessMm: 40 };
     const pieces = buildBottomTransitionFrame(params);
     const overall = new THREE.Box3();
@@ -158,7 +158,7 @@ describe("buildBottomTransitionFrame", () => {
     expect(overall.max.x - overall.min.x).toBeCloseTo(2 - 0.04, 5); // bottomTransitionLength - joistThicknessMm/1000
     expect(overall.max.y - overall.min.y).toBeCloseTo(0.1, 5);
     expect(overall.min.y).toBeCloseTo(0, 5);
-    expect(overall.max.z - overall.min.z).toBeCloseTo(3.02, 5); // width + ribThickness
+    expect(overall.max.z - overall.min.z).toBeCloseTo(3, 5); // width — edge ribs are inset, no overhang
     expect((overall.min.x + overall.max.x) / 2).toBeCloseTo(0, 5);
     expect((overall.min.z + overall.max.z) / 2).toBeCloseTo(0, 5);
   });
@@ -182,7 +182,7 @@ describe("buildBottomTransitionFrame", () => {
 
   it("insets each stud's Z-span to the plates' inside faces, not their centerlines or outside faces", () => {
     const params = { ...HALF_PIPE_DEFAULTS, width: 3, ribThicknessMm: 20, joistThicknessMm: 45 };
-    const outsideZ = params.width / 2 + params.ribThicknessMm / 1000 / 2;
+    const outsideZ = params.width / 2; // edge ribs are inset (see ribZPositions), no overhang
     const expectedStudSpan = 2 * (outsideZ - params.joistThicknessMm / 1000);
 
     const pieces = buildBottomTransitionFrame(params);
@@ -310,22 +310,34 @@ describe("halfPipeCopingXs", () => {
 });
 
 describe("halfPipeFootprint", () => {
-  it("matches the built geometry's actual bounding box", () => {
+  it("matches the built solid geometry's actual length/height", () => {
     const geometry = buildHalfPipeGeometry(HALF_PIPE_DEFAULTS);
     geometry.computeBoundingBox();
     const box = geometry.boundingBox!;
     const footprint = halfPipeFootprint(HALF_PIPE_DEFAULTS);
 
     expect(footprint.length).toBeCloseTo(box.max.x - box.min.x, 5);
-    expect(footprint.width).toBeCloseTo(box.max.z - box.min.z, 5);
     expect(footprint.height).toBeCloseTo(box.max.y - box.min.y, 5);
+  });
+
+  it("matches what's actually rendered (the ribs') combined width, not the solid wedge's — edge ribs stick out beyond it", () => {
+    const ribs = buildHalfPipeRibs(HALF_PIPE_DEFAULTS);
+    const overall = new THREE.Box3();
+    for (const rib of ribs) {
+      rib.computeBoundingBox();
+      overall.union(rib.boundingBox!);
+    }
+    const footprint = halfPipeFootprint(HALF_PIPE_DEFAULTS);
+
+    expect(footprint.width).toBeCloseTo(overall.max.z - overall.min.z, 5);
   });
 
   it("computes length/width/height at defaults", () => {
     const footprint = halfPipeFootprint(HALF_PIPE_DEFAULTS);
     // bottomTransitionLength (2.25) + 2 * (radius * sin(57deg) + deckLength) = 2.25 + 2 * (1.8*sin(57deg) + 0.3)
     expect(footprint.length).toBeCloseTo(5.8692, 4);
-    expect(footprint.width).toBe(3);
+    // width param directly — edge ribs are inset (see ribZPositions), so no overhang past it
+    expect(footprint.width).toBeCloseTo(3, 5);
     // radius * (1 - cos(57deg)) + joistDepthMm / 1000 (90mm)
     expect(footprint.height).toBeCloseTo(0.90965, 5);
   });
