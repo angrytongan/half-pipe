@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
+  buildBottomTransitionFrame,
   buildHalfPipeJoists,
   buildHalfPipeRibs,
   HALF_PIPE_DEFAULTS,
@@ -39,6 +40,9 @@ interface RampSpec<P> {
   // Joist/ledger boxes — optional since a ramp type without any bays to bridge would have
   // nothing to build here.
   buildJoists?: (params: P) => THREE.BufferGeometry[];
+  // The bottom transition's own framing (a stud wall lying on the ground) — optional since a
+  // ramp type without one (e.g. quarter-pipe, once it rejoins) has nothing to build here.
+  buildBottomTransitionFrame?: (params: P) => THREE.BufferGeometry[];
   // X positions (in the built geometry's own centered coordinate space) of the coping
   // tubes — the curve/deck lip, not the deck's outer edge. See decisions.md.
   copingXs: (params: P) => number[];
@@ -61,7 +65,10 @@ const RAMPS: Record<RampType, RampSpec<any>> = {
       { key: "joistThicknessMm", label: "Joist thickness (mm)", min: 20, max: 70, step: 1 },
       { key: "joistDepthMm", label: "Joist depth (mm)", min: 45, max: 190, step: 1 },
     ],
-    bottomTransitionSliders: [{ key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.25 }],
+    bottomTransitionSliders: [
+      { key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.25 },
+      { key: "internalStudCount", label: "Internal studs", min: 0, max: 20, step: 1 },
+    ],
     rampSliders: [
       { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
       { key: "transitionAngleDeg", label: "Transition angle (°)", min: 45, max: 90, step: 1 },
@@ -71,6 +78,7 @@ const RAMPS: Record<RampType, RampSpec<any>> = {
     ],
     buildRibs: (p: HalfPipeParams) => buildHalfPipeRibs(p),
     buildJoists: (p: HalfPipeParams) => buildHalfPipeJoists(p),
+    buildBottomTransitionFrame: (p: HalfPipeParams) => buildBottomTransitionFrame(p),
     copingXs: (p: HalfPipeParams) => halfPipeCopingXs(p),
     footprint: (p: HalfPipeParams) => halfPipeFootprint(p),
     buildDimensions: (p: HalfPipeParams) => buildHalfPipeDimensions(p),
@@ -136,6 +144,9 @@ scene.add(rampGroup);
 const joistMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a876, flatShading: true }); // wood-toned, distinct from the ribs
 const joistGroup = new THREE.Group();
 scene.add(joistGroup);
+
+const bottomTransitionGroup = new THREE.Group(); // same lumber as the joists, so reuses joistMaterial
+scene.add(bottomTransitionGroup);
 
 const COPING_RADIUS = 0.03; // ~60mm schedule-40 steel pipe, the standard skate coping stock
 const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.4 });
@@ -272,6 +283,16 @@ function rebuildRamp(type: RampType): void {
     const joist = new THREE.Mesh(geometry, joistMaterial);
     joist.castShadow = true;
     joistGroup.add(joist);
+  }
+
+  for (const child of bottomTransitionGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  bottomTransitionGroup.clear();
+  for (const geometry of RAMPS[type].buildBottomTransitionFrame?.(currentParams) ?? []) {
+    const member = new THREE.Mesh(geometry, joistMaterial);
+    member.castShadow = true;
+    bottomTransitionGroup.add(member);
   }
 
   const deckY = RAMPS[type].footprint(currentParams).height;

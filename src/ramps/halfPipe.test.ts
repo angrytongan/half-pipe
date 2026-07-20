@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import {
-  buildBottomTransitionSlab,
+  buildBottomTransitionFrame,
   buildHalfPipeGeometry,
   buildHalfPipeJoists,
   buildHalfPipeRibs,
@@ -133,19 +134,67 @@ describe("buildHalfPipeRibs", () => {
   });
 });
 
-describe("buildBottomTransitionSlab", () => {
-  it("spans bottomTransitionLength x width x joistDepth, sitting on the ground", () => {
-    const params = { ...HALF_PIPE_DEFAULTS, bottomTransitionLength: 2, width: 3, joistDepthMm: 100 };
-    const slab = buildBottomTransitionSlab(params);
-    slab.computeBoundingBox();
-    const box = slab.boundingBox!;
+describe("buildBottomTransitionFrame", () => {
+  it("returns 2 plates + (internalStudCount + 2) studs", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalStudCount: 4 };
+    expect(buildBottomTransitionFrame(params)).toHaveLength(2 + 4 + 2);
+  });
 
-    expect(box.max.x - box.min.x).toBeCloseTo(2, 5);
-    expect(box.max.z - box.min.z).toBeCloseTo(3, 5);
-    expect(box.min.y).toBeCloseTo(0, 5);
-    expect(box.max.y).toBeCloseTo(0.1, 5);
-    expect((box.min.x + box.max.x) / 2).toBeCloseTo(0, 5);
-    expect((box.min.z + box.max.z) / 2).toBeCloseTo(0, 5);
+  it("produces more studs as internalStudCount grows", () => {
+    const few = buildBottomTransitionFrame({ ...HALF_PIPE_DEFAULTS, internalStudCount: 0 });
+    const many = buildBottomTransitionFrame({ ...HALF_PIPE_DEFAULTS, internalStudCount: 5 });
+    expect(many.length - few.length).toBe(5);
+  });
+
+  it("spans joistDepth x (width + ribThickness) exactly, and bottomTransitionLength minus the last curve joist's thickness — butting up against it, not into its midpoint", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, bottomTransitionLength: 2, width: 3, joistDepthMm: 100, ribThicknessMm: 20, joistThicknessMm: 40 };
+    const pieces = buildBottomTransitionFrame(params);
+    const overall = new THREE.Box3();
+    for (const piece of pieces) {
+      piece.computeBoundingBox();
+      overall.union(piece.boundingBox!);
+    }
+
+    expect(overall.max.x - overall.min.x).toBeCloseTo(2 - 0.04, 5); // bottomTransitionLength - joistThicknessMm/1000
+    expect(overall.max.y - overall.min.y).toBeCloseTo(0.1, 5);
+    expect(overall.min.y).toBeCloseTo(0, 5);
+    expect(overall.max.z - overall.min.z).toBeCloseTo(3.02, 5); // width + ribThickness
+    expect((overall.min.x + overall.max.x) / 2).toBeCloseTo(0, 5);
+    expect((overall.min.z + overall.max.z) / 2).toBeCloseTo(0, 5);
+  });
+
+  it("ends each plate at the last curve joist's inner face — the joist's own centerline is at bottomTransitionLength/2", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, bottomTransitionLength: 2.25, joistThicknessMm: 45 };
+    const lastJoistCenterX = params.bottomTransitionLength / 2;
+    const expectedPlateEndX = lastJoistCenterX - params.joistThicknessMm / 1000 / 2;
+
+    const plates = buildBottomTransitionFrame(params).filter((piece) => {
+      piece.computeBoundingBox();
+      return piece.boundingBox!.max.x - piece.boundingBox!.min.x > piece.boundingBox!.max.z - piece.boundingBox!.min.z;
+    });
+    expect(plates).toHaveLength(2);
+    for (const plate of plates) {
+      const box = plate.boundingBox!;
+      expect(box.max.x).toBeCloseTo(expectedPlateEndX, 5);
+      expect(box.min.x).toBeCloseTo(-expectedPlateEndX, 5);
+    }
+  });
+
+  it("insets each stud's Z-span to the plates' inside faces, not their centerlines or outside faces", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, width: 3, ribThicknessMm: 20, joistThicknessMm: 45 };
+    const outsideZ = params.width / 2 + params.ribThicknessMm / 1000 / 2;
+    const expectedStudSpan = 2 * (outsideZ - params.joistThicknessMm / 1000);
+
+    const pieces = buildBottomTransitionFrame(params);
+    const studs = pieces.filter((piece) => {
+      piece.computeBoundingBox();
+      return piece.boundingBox!.max.z - piece.boundingBox!.min.z > piece.boundingBox!.max.x - piece.boundingBox!.min.x;
+    });
+    expect(studs.length).toBeGreaterThan(0);
+    for (const stud of studs) {
+      const box = stud.boundingBox!;
+      expect(box.max.z - box.min.z).toBeCloseTo(expectedStudSpan, 5);
+    }
   });
 });
 
@@ -156,7 +205,7 @@ describe("buildHalfPipeJoists", () => {
     const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
     const curveInteriorCount = curveSegments - 1;
     const pointsPerSide = curveInteriorCount + 3; // bottom corner, curve interior, top corner, floor-section end
-    const perSection = 2 * pointsPerSide + 1; // both sides, plus the equidistant joist
+    const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
     const sections = internalRibCount + 1;
 
     expect(buildHalfPipeJoists(HALF_PIPE_DEFAULTS)).toHaveLength(perSection * sections);
@@ -184,17 +233,17 @@ describe("buildHalfPipeJoists", () => {
     }
   });
 
-  it("includes one joist centered at x=0, equidistant between the two bottom corners", () => {
+  it("no longer includes a joist midway between the ramp ends (x=0) — that's the bottom-transition frame's job now", () => {
     const joists = buildHalfPipeJoists(HALF_PIPE_DEFAULTS);
     const atCenter = joists.some((joist) => {
       joist.computeBoundingBox();
       const box = joist.boundingBox!;
       return Math.abs((box.min.x + box.max.x) / 2) < 1e-9;
     });
-    expect(atCenter).toBe(true);
+    expect(atCenter).toBe(false);
   });
 
-  it("sizes the flat landmarks (center + bottom corners) exactly joistThicknessMm (X) x joistDepthMm (Y)", () => {
+  it("sizes the flat landmarks (bottom corners) exactly joistThicknessMm (X) x joistDepthMm (Y)", () => {
     const params = { ...HALF_PIPE_DEFAULTS, joistThicknessMm: 60, joistDepthMm: 140 };
     const jointDepth = params.joistDepthMm / 1000;
     const flat = buildHalfPipeJoists(params).filter((joist) => {

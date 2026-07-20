@@ -15,6 +15,7 @@ export interface HalfPipeParams {
   internalRibCount: number;
   joistThicknessMm: number;
   joistDepthMm: number;
+  internalStudCount: number;
 }
 
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
@@ -28,6 +29,7 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   internalRibCount: 1,
   joistThicknessMm: JOIST_THICKNESS_MM,
   joistDepthMm: JOIST_DEPTH_MM,
+  internalStudCount: 3,
 };
 
 /**
@@ -89,19 +91,47 @@ export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[
 }
 
 /**
- * The bottom transition's own framing, sized to fill exactly the gap the rib curves now sit
- * on top of (see halfPipeOutline) — a simple box from y=0 to y=joistDepth, spanning
- * bottomTransitionLength x width. Not a rib — a separate structural piece, screwed to the
- * curved transition sections (see research/design.md's "Half-pipe as a special case of
- * quarter-pipe": the bottom transition's framing is the one piece a quarter-pipe alone
- * doesn't have).
+ * The bottom transition's own framing: a stud wall lying on the ground — not a rib, a
+ * separate structural piece screwed to the curved transition sections (see research/design.md's
+ * "Half-pipe as a special case of quarter-pipe": the bottom transition's framing is the one
+ * piece a quarter-pipe alone doesn't have). Two plates run almost the full bottomTransitionLength
+ * — inset by half the last curve joist's own thickness on each end (see buildHalfPipeJoists) so
+ * they butt up against that joist's inner face instead of reaching into its midpoint — and are
+ * positioned so their *outer* faces exactly meet the outside faces of the edge ribs (the wall's
+ * "height", lying flat instead of standing up). `internalStudCount + 2` studs (two mandatory
+ * end studs, same convention as internalRibCount) then span between the plates' *inside* faces,
+ * evenly spaced along the (now shorter) plate length, inset so their outer faces sit flush with
+ * the plate ends. Cross-section for both plates and studs reuses joistThicknessMm/joistDepthMm —
+ * the same lumber dimensions as everywhere else in this model — so joistDepthMm alone still
+ * determines the wall's thickness off the ground, unchanged from before this was split into
+ * members.
  */
-export function buildBottomTransitionSlab(params: HalfPipeParams): THREE.BufferGeometry {
-  const { bottomTransitionLength, joistDepthMm, width } = params;
+export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { bottomTransitionLength, joistDepthMm, joistThicknessMm, width, ribThicknessMm, internalStudCount } = params;
   const jointDepth = joistDepthMm / 1000;
-  const geometry = new THREE.BoxGeometry(bottomTransitionLength, jointDepth, width);
-  geometry.translate(0, jointDepth / 2, 0);
-  return geometry;
+  const thickness = joistThicknessMm / 1000;
+  const ribThickness = ribThicknessMm / 1000;
+  const outsideZ = width / 2 + ribThickness / 2; // the outside face of each edge rib
+
+  const member = (spanZ: boolean, span: number, x: number, z: number): THREE.BufferGeometry => {
+    const geometry = spanZ ? new THREE.BoxGeometry(thickness, jointDepth, span) : new THREE.BoxGeometry(span, jointDepth, thickness);
+    geometry.translate(x, jointDepth / 2, z);
+    return geometry;
+  };
+
+  // Inset by the last curve joist's own thickness so the plates butt up against it, not into it.
+  const plateLength = bottomTransitionLength - thickness;
+  const plates = [-1, 1].map((side) => member(false, plateLength, 0, side * (outsideZ - thickness / 2)));
+
+  const insideZ = outsideZ - thickness; // the plates' inside faces
+  const studCount = internalStudCount + 2;
+  const studSpan = plateLength - thickness; // inset so the end studs' outer faces meet the (now shorter) plate ends
+  const studs = Array.from({ length: studCount }, (_, i) => {
+    const x = -studSpan / 2 + (studSpan * i) / (studCount - 1);
+    return member(true, insideZ * 2, x, 0);
+  });
+
+  return [...plates, ...studs];
 }
 
 /**
@@ -109,8 +139,8 @@ export function buildBottomTransitionSlab(params: HalfPipeParams): THREE.BufferG
  * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
  * evenly-spaced interior points up the curve (≤ CURVE_JOIST_SPACING_M apart, exact at both
  * ends — the same trick ribZPositions uses for rib counts), top corner (deck start), and the
- * end of the floor section (deck's outer edge) — plus one extra joist centered under the
- * bottom transition, equidistant between the two bottom-corner joists. Section bays reuse
+ * end of the floor section (deck's outer edge). No joist under the middle of the bottom
+ * transition — that's buildBottomTransitionFrame's own studs, not a joist. Section bays reuse
  * ribZPositions's own output: its doubled-seam ribs already pair up as
  * (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per pair, so no separate bay-finding
  * logic is needed — a joist only bridges a real section bay, never the near-zero gap inside
@@ -140,7 +170,6 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, deckStart, deckOuter];
   const localAngles: number[] = [0, ...curveInteriorAngles, sweep, 0];
   const worldJoists: { x: number; y: number; angle: number }[] = [
-    { x: 0, y: jointDepth, angle: 0 }, // extra joist, equidistant between the two bottom corners
     ...localPoints.map(([x, y], i) => ({ x: -half - x, y: y + jointDepth, angle: -localAngles[i] })),
     ...localPoints.map(([x, y], i) => ({ x: half + x, y: y + jointDepth, angle: localAngles[i] })),
   ];

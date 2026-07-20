@@ -70,16 +70,36 @@ extends `joistThicknessMm/1000 / 2` inward from there, toward the ramp's
 center, before dropping to the ground, so the rib actually covers that
 joist's full footprint instead of stopping at its centerline and leaving
 the inner half exposed), rather than spanning the whole
-`bottomTransitionLength` gap; that gap is `buildBottomTransitionSlab`'s
+`bottomTransitionLength` gap; that gap is `buildBottomTransitionFrame`'s
 job, not the ribs'. The deck-side closing edge (the non-structural
 convenience noted below that closes each 2D shape for extrusion) still
-drops to true `y=0`, unaffected. `buildBottomTransitionSlab` computes that
-framing as a simple box from `y=0` to `y=joistDepthMm/1000`, spanning
-`bottomTransitionLength × width` — screwed to the curved transition
-sections as its own separate construction, not fused with the ribs. It's
-geometry-only for now: not currently rendered in the scene (it was drawn
-as a plain blue box sharing the rib material, `bottomTransitionMesh` in
-`main.ts`, which was removed pending a better way to show it).
+drops to true `y=0`, unaffected.
+
+`buildBottomTransitionFrame` builds that framing as a stud wall lying on
+the ground, not a solid slab — screwed to the curved transition sections
+as its own separate construction, not fused with the ribs (see
+research/design.md's "Half-pipe as a special case of quarter-pipe": the
+bottom transition's framing is the one piece a quarter-pipe alone doesn't
+have). Two **plates** run almost the full `bottomTransitionLength` —
+inset by half the last curve joist's own thickness on each end (see
+Joists below) so they butt up against that joist's inner face instead of
+reaching into its midpoint, since that joist is centered exactly at
+`bottomTransitionLength / 2` — and are positioned so their *outer* faces
+exactly meet the outside faces of the edge ribs
+(`width/2 + ribThicknessMm/1000/2`) — that's the wall's "height", lying
+flat instead of standing up. `internalStudCount + 2` **studs** (two
+mandatory end studs plus the slider count, same `internalRibCount`
+convention) then span between the plates' *inside* faces, evenly spaced
+along the (now shorter) plate length and inset so the end studs' outer
+faces sit flush with the plate ends — the same "inset to the inside face"
+convention the joists use against the ribs. Plates and studs both reuse
+`joistThicknessMm`/`joistDepthMm` for their cross-section — the same
+lumber dimensions as everywhere else in this model, so `joistDepthMm`
+alone still determines the wall's height off the ground, unchanged from
+when this was a single box. `internalStudCount` (default 3) is a slider
+in the "Bottom transition" section. `src/main.ts` renders the pieces in
+their own `THREE.Group` (`bottomTransitionGroup`), reusing the joists'
+wood-toned material — it's the same kind of lumber.
 
 `buildHalfPipeGeometry` (the full-`width` solid wedge) still exists and is
 still tested — a correct, reusable geometry-only function, sharing the same
@@ -103,9 +123,9 @@ section bay) pair:
   exceeds `CURVE_JOIST_SPACING_M` — 200mm, rounded from `research/design.md`'s
   cited ~203mm for construction ease — and lands exactly on both ends, the
   same trick `ribZPositions` uses for rib counts), the top corner (deck
-  start), and the end of the floor section (the deck's outer edge).
-- One extra joist, not mirrored, centered at `x=0` — equidistant between
-  the two bottom-corner joists, under the middle of the bottom transition.
+  start), and the end of the floor section (the deck's outer edge). No
+  joist under the middle of the bottom transition — that's
+  `buildBottomTransitionFrame`'s own studs' job, not a joist's.
 - **Build-section bays** reuse `ribZPositions`'s own output directly: its
   doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the
@@ -119,7 +139,7 @@ section bay) pair:
   Joists on the curve (and the deck-start landmark, which is the curve's own
   endpoint) are rotated to the local tangent angle — `transitionArcPoints`'s
   parameter `t` *is* that angle — so their top face sits flush against the
-  curved skin instead of staying horizontal. The bottom-corner, center, and
+  curved skin instead of staying horizontal. The bottom-corner and
   deck-outer landmarks are flat (angle 0) already, so they're unrotated. The
   angle is mirrored (negated) on the left side to match the existing X
   mirroring.
