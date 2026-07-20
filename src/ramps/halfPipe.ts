@@ -106,8 +106,8 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
 
 /**
  * Two mirrored transitions joined by a bottom transition, decks on both outer
- * edges — extruded across width. Closed outline, same solid-wedge convention
- * as quarterPipe.ts. Centered on X/Z, base at Y=0. Geometry-only utility —
+ * edges — extruded across width. Closed outline, solid-wedge convention.
+ * Centered on X/Z, base at Y=0. Geometry-only utility —
  * `buildHalfPipeRibs` below is what's actually rendered (see decisions.md).
  */
 export function buildHalfPipeGeometry(params: HalfPipeParams): THREE.BufferGeometry {
@@ -240,8 +240,7 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
  * outer/back edges. Positioned by the same notch math that cuts the rib (see coping.ts), not
  * just the deck/curve corner itself, since the pipe sits recessed into that notch rather than
  * resting exactly on the corner. The outline is symmetric about local x=0 by construction
- * (left/right are mirrored), so centering is a no-op here — unlike quarterPipe's, no
- * span/offset math is needed.
+ * (left/right are mirrored), so centering is a no-op here.
  */
 export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: number }[] {
   const {

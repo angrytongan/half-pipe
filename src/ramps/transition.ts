@@ -30,8 +30,8 @@ export function transitionExitDirection(sweepAngleDeg: number): [number, number]
 
 /**
  * Transition arc + optional vertical extension + optional flat deck, from the
- * ground-tangent start (0,0) out to the deck's outer edge — shared by
- * quarterPipe and halfPipe so the two can't drift apart.
+ * ground-tangent start (0,0) out to the deck's outer edge — the shared shape of
+ * a deck attachment, used by both of a half-pipe's mirrored transitions.
  */
 export function transitionAndDeckPoints(
   radius: number,

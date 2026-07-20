@@ -2,14 +2,6 @@
 
 Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for the scope/design reasoning behind an item before starting it. When an item is built, remove it from here and describe it in [status.md](status.md) instead.
 
-## Quarter-pipe (stage 3)
-
-- [ ] Bring `quarterPipe.ts` back into `src/main.ts`'s UI once it shares
-      the half-pipe's available-space + structural-rendering model — see
-      decisions.md's "Quarter-pipe is temporarily out of the UI" note.
-      Expected to be comparatively small, since a half-pipe is built here
-      as two quarter-pipe transitions plus a bottom transition.
-
 ## Construction / BOM
 
 - [ ] Construction methods (plywood/OSB skin over a framed rib structure —
@@ -20,9 +12,6 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Dimension lines
 
-- [ ] Dimension lines for quarter-pipe once it rejoins the UI (stage 3) —
-      `buildHalfPipeDimensions` (see status.md) should extend/adapt
-      naturally once quarter-pipe shares the half-pipe's model.
 - [ ] An angular-dimension variant for `transitionAngleDeg` — none of
       `obstacle`'s dimension code has this either, and `buildLinearDimension`
       only handles straight measurements.
@@ -52,6 +41,18 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       surface will actually sit, since that surface doesn't exist yet.
       The horizontal cut (shelf) is confirmed correct as-is; only the
       vertical cut needs revisiting once the ramp surface is modeled.
+
+## Scene / UI
+
+- [ ] Reset view — recenter the camera/`controls.target` back to the
+      initial framing (`camera.position.set(6, 4, 7)`,
+      `controls.target.set(0, 0.6, 0)`), independent of "Reset to
+      defaults" (`#reset-btn` in `index.html`/`main.ts`), which only
+      resets the ramp *parameters*, not the camera. Orbiting (see
+      status.md's Scene section) can leave the camera anywhere.
+- [ ] Undo/redo for slider changes — no history stack exists yet;
+      `currentParams` (`src/main.ts`) is mutated in place by
+      `renderSliderList`'s `input` handler with no record of prior values.
 
 ## Ramps
 

@@ -14,9 +14,10 @@ function formatMeters(value: number): string {
 }
 
 /**
- * Height/length/bottom-transition-length/rib-spacing dimension lines for a half-pipe, computed
- * analytically from HalfPipeParams (same approach as halfPipeFootprint/halfPipeCopingXs)
- * rather than from built rib geometry. Only one rib and one rib-to-rib gap are dimensioned —
+ * Height/length/bottom-transition-length/rib-spacing/width/rib-width dimension lines for a
+ * half-pipe, computed analytically from HalfPipeParams (same approach as
+ * halfPipeFootprint/halfPipeCopingCenters) rather than from built rib geometry. Only one rib
+ * and one rib-to-rib gap are dimensioned —
  * every rib is an identical copy of the others and ribs are evenly spaced (see ribZPositions),
  * so dimensioning each one would be redundant. Each dimension gets its own distinct position
  * (not just a different offset distance) — label sprites use depthTest:false so they don't
@@ -26,7 +27,7 @@ function formatMeters(value: number): string {
  * the other.
  */
 export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimension[] {
-  const { width, internalRibCount, ribThicknessMm, bottomTransitionLength, joistDepthMm } = params;
+  const { width, internalRibCount, ribThicknessMm, bottomTransitionLength, joistDepthMm, joistThicknessMm } = params;
   const { length, height } = halfPipeFootprint(params);
   const halfLength = length / 2;
   const halfBottomTransition = bottomTransitionLength / 2;
@@ -35,6 +36,9 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
   const ribThickness = ribThicknessMm / 1000;
   const halfRibThickness = ribThickness / 2;
   const [gapStartZ, gapEndZ] = ribZPositions(width, internalRibCount, ribThickness);
+  // The left rib's own base — the bottommost curve joist's inside face (see halfPipeOutline) —
+  // not the bottom transition's own half-length; the rib's outline is inset from there.
+  const ribBaseX = -halfBottomTransition + joistThicknessMm / 1000 / 2;
 
   const heightDim = buildLinearDimension(
     new THREE.Vector3(-halfLength, 0, -halfWidth),
@@ -75,6 +79,17 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     new THREE.Vector3(-1, 0, 0),
     OFFSET_DISTANCE,
   );
+  // One rib's own X-extent — from its base (the bottommost curve joist's inside face, see
+  // ribBaseX above) out to its own deck's outer edge — not the whole ramp's length (lengthDim
+  // above already covers that). Drawn at deck height from the same corner point the height
+  // dimension's own top already sits at (-halfLength, height, -halfWidth), with the same
+  // offset direction, so the two form a single corner bracket instead of two unrelated lines.
+  const ribWidthDim = buildLinearDimension(
+    new THREE.Vector3(ribBaseX, height, -halfWidth),
+    new THREE.Vector3(-halfLength, height, -halfWidth),
+    new THREE.Vector3(0, 0, 1),
+    OFFSET_DISTANCE,
+  );
 
   return [
     { ...heightDim, text: formatMeters(height) },
@@ -82,5 +97,6 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     { ...bottomTransitionDim, text: formatMeters(bottomTransitionLength) },
     { ...spacingDim, text: formatMeters(gapEndZ - gapStartZ - ribThickness) },
     { ...widthDim, text: formatMeters(width) },
+    { ...ribWidthDim, text: formatMeters(Math.abs(-halfLength - ribBaseX)) },
   ];
 }

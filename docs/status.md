@@ -4,28 +4,21 @@ What's built and how. Update this after each completed feature — check [featur
 
 ## Ramps
 
-Two ramp types built, each a pure geometry builder in `src/ramps/`, sharing curve math from `src/ramps/transition.ts`, wired into `src/main.ts`'s generic slider UI:
+Half-pipe is the only ramp type — `src/ramps/halfPipe.ts` is a pure
+geometry builder, sharing curve math from `src/ramps/transition.ts`,
+wired into `src/main.ts`'s slider UI:
 
-- `quarterPipe.ts` — single transition: optional flat run-in
-  (`flatRunLength`), circular transition curve (`radius`/
-  `transitionAngleDeg`), optional vertical extension (`vertHeight`), flat
-  deck platform (`deckLength`). Solid wedge, closed `THREE.Shape` extruded
-  across `width`. Also exports `quarterPipeCopingX` (see Scene below).
-- `halfPipe.ts` — two mirrored quarter-pipe transitions joined by a bottom
-  transition (`bottomTransitionLength`), independent decks on both outer
-  edges. Shares `transition.ts`'s `transitionAndDeckPoints` with
-  `quarterPipe.ts` so the two transitions can't drift apart. Also exports
-  `halfPipeCopingCenters` and `halfPipeFootprint` (see Available space below).
+- `halfPipe.ts` — two mirrored transitions joined by a bottom transition
+  (`bottomTransitionLength`), independent decks on both outer edges.
+  Uses `transition.ts`'s `transitionAndDeckPoints` for the shared curve
+  trig. Also exports `halfPipeCopingCenters` and `halfPipeFootprint`
+  (see Available space below).
 
-`quarterPipe.ts` is currently unwired from the UI (see decisions.md) but
-still builds, still tested — `src/main.ts`'s `RampType` is `"halfPipe"`
-only for now.
-
-Both share `src/ramps/util.ts`'s `centerFootprint` — centers geometry
+Uses `src/ramps/util.ts`'s `centerFootprint` — centers geometry
 on X/Z via bounding box, leaves Y untouched so the base sits at 0.
 
-A "Reset to defaults" button (`#reset-btn`) below the sliders re-applies the
-current type's defaults.
+A "Reset to defaults" button (`#reset-btn`) below the sliders re-applies
+`HALF_PIPE_DEFAULTS`.
 
 ## Structure
 
@@ -230,70 +223,37 @@ already does for the rib group and coping, called after every param change.
 
 ## Scene
 
-`src/main.ts`: `PerspectiveCamera` + `OrbitControls` (no damping),
-navigation mapped to feel like SketchUp rather than OrbitControls' own
-default: `zoomToCursor: true` so scroll-zoom centers on the pointer;
-`mouseButtons` maps both `LEFT` and `MIDDLE` to `THREE.MOUSE.ROTATE`
-(`RIGHT: null`, free for future tools like selection) — middle-drag
-matches SketchUp directly, left-drag orbits too since most trackpads
-have no easy middle-click; shift+either pans, via OrbitControls' own
-built-in modifier handling for a ROTATE-mapped button, no extra code
-needed (`enableRotate` staying `false` doesn't block this — the pan
-branch of that modifier check doesn't look at it, only the rotate
-branch does).
-
-Rotation itself (SketchUp-style: pivot around whatever's under the
-cursor, not a fixed point) is **not** built on `controls.target` —
-`controls.enableRotate = false` leaves plain left/middle drags entirely
-unclaimed by OrbitControls, and a hand-rolled `pointerdown`/
-`pointermove` pair of listeners drives it instead, as a true rigid
-rotation rather than "recompute spherical coords relative to the pivot,
-then `camera.lookAt(pivot)`" (an earlier version worked that way and
-still snapped — `lookAt` forces the camera to face the pivot *exactly*
-for any angle including ~0, so the first `pointermove` of a *new* drag,
-whose pivot is generally different from wherever the camera was
-previously facing, jumps regardless of how small the actual mouse
-movement is — confirmed numerically, a 1px drag produced a jump of
-~10% of screen height). The fix: each drag step rotates
-`camera.position` *and* `camera.quaternion` by the same small quaternion
-around the fixed pivot (`rotateCameraAroundPivot`) — azimuth around
-world-up (never introduces roll), then elevation around the
-camera's own, freshly-recomputed local right axis — which is the
-identity at zero rotation and stays continuous as the pivot changes
-between drags, since it never forces a fresh "face this exact point"
-reorientation. `controls.target` is then re-derived from the camera's
-resulting facing direction (`camera.position + forward * distance`, distance
-preserved from before the rotation) rather than set to the pivot, so
-OrbitControls' own `update()` — which unconditionally calls
-`camera.lookAt(target)` every frame regardless of dragging — finds
-target already exactly where the camera is looking and doesn't undo any
-of this on the next render. The pivot itself is picked via
-`THREE.Raycaster` once on `pointerdown` (against the ground and the
-ramp/joist/bottom-transition/coping groups, first hit wins, or falls
-back to the existing `controls.target` on a miss), silently — no camera
-change until real drag movement accumulates, verified numerically down
-to an exactly-zero screen-projection change at zero rotation and a
-proportionally tiny (not snapped) change even across many consecutive
-new-pivot drags. Pan (shift+drag) and zoom (scroll, `zoomToCursor`)
-stay on OrbitControls, unaffected. Ambient + raking directional light
-with shadows, a flat ground plane, flat-shaded solid-color ramp
-material (schematic style, no textures).
+`src/main.ts`: `PerspectiveCamera` + stock `OrbitControls` (no damping,
+default mouse mapping — left-drag rotates around the fixed
+`controls.target`, right-drag pans, scroll/middle-drag dollies).
+`zoomToCursor: true` is the one non-default flag, a built-in
+OrbitControls option so scroll-zoom centers on the pointer rather than
+the target. An earlier version replaced rotation with a hand-rolled,
+raycast-picked-pivot orbit (SketchUp-style: pivot around whatever's
+under the cursor) — reverted; simplicity won out over that feel, and it
+made pan/zoom's existing distance-proportional speed (both scale with
+distance to `controls.target`/the pivot, by OrbitControls' own design —
+not something either version of the camera code introduced) harder to
+retune uniformly. Ambient + raking directional light with shadows, a
+flat ground plane, flat-shaded solid-color ramp material (schematic
+style, no textures).
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
-per transition/deck lip (steel-pipe gray, metalness/roughness material). Center comes from
-each ramp module's own `<name>CopingCenters` function, not the geometry's bounding box — see
-decisions.md for why. Quarter-pipe gets one, half-pipe gets two.
+per transition/deck lip (steel-pipe gray, metalness/roughness material), one per side — a
+half-pipe has two. Center comes from `halfPipeCopingCenters`, not the geometry's bounding box —
+see decisions.md for why.
 
 `index.html` layout: an `.app-header` (skateboard icon, title, "in
 development" pill, GitHub link) matching `obstacle`'s header, above an
-`.app` flex row holding the `#panel` (type select at the top, the
-always-visible space-status pills below it, then a divider, then an
-accordion of six independently-collapsible sections — Available space,
-Ramp parameters, Ribs, Joists, Bottom transition, Coping, each a plain
-native `<details>`/`<summary>` so no JS is needed — then the reset button)
-and `#viewport` (3D view) cards. No method-select/BOM/tooltip UI this
-round — see features.md.
+`.app` flex row holding the `#panel` (the always-visible space-status
+pills at the top, then a divider, then an accordion of six
+independently-collapsible sections — Available space, Ramp parameters,
+Ribs, Joists, Bottom transition, Coping, each a plain native
+`<details>`/`<summary>` so no JS is needed — then the reset button) and
+`#viewport` (3D view) cards. No type-select (half-pipe is the only ramp
+type — see decisions.md) or method-select/BOM/tooltip UI this round —
+see features.md.
 
 ## Available space
 

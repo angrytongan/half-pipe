@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
+import * as THREE from "three";
 import { buildHalfPipeDimensions } from "./halfPipeDimensions";
 import { HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 
 describe("buildHalfPipeDimensions", () => {
-  it("returns one dimension each for height, length, bottom transition length, rib spacing, and width, labeled to two decimals", () => {
+  it("returns one dimension each for height, length, bottom transition length, rib spacing, width, and rib width, labeled to two decimals", () => {
     const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
-    expect(dims).toHaveLength(5);
+    expect(dims).toHaveLength(6);
     // height: radius * (1 - cos(57deg)) + joistDepthMm/1000 = 0.8196... + 0.09
     // length: bottomTransitionLength + 2 * (radius * sin(57deg) + deckLength)
     // bottom transition: bottomTransitionLength itself
@@ -16,7 +17,10 @@ describe("buildHalfPipeDimensions", () => {
     // since each rib eats half its own thickness into the gap
     // width: outside surface to outside surface, which is exactly the width param — the edge
     // ribs are inset (see ribZPositions) so the structure has no overhang past it
-    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.46m", "3.00m"]);
+    // rib width: one rib's own X-extent, from its base (bottommost curve joist's inside face,
+    // half/2 - joistThicknessMm/1000/2 = 1.1025) out to its own deck outer edge (halfLength =
+    // 2.9346...) = 1.8321...
+    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.46m", "3.00m", "1.83m"]);
   });
 
   it("computes width as exactly the width param (edge ribs are inset, no overhang), and rib spacing as the centerline gap minus one rib thickness", () => {
@@ -83,5 +87,45 @@ describe("buildHalfPipeDimensions", () => {
     for (const other of [heightDim, lengthDim, bottomTransitionDim, spacingDim]) {
       expect(widthDim.labelPosition.distanceTo(other.labelPosition)).toBeGreaterThan(0.5);
     }
+  });
+
+  it("measures the rib width as one rib's own X-extent (base to its own deck outer edge) — excludes the bottom transition entirely, unlike the overall length", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, joistThicknessMm: 60 };
+    const dims = buildHalfPipeDimensions(params);
+    const ribWidthValue = Number(dims[5].text.replace("m", ""));
+
+    // deckOuterX (radius*sin(57deg) + deckLength) + half the joist thickness — the rib doesn't
+    // span any of bottomTransitionLength at all, that's buildBottomTransitionFrame's own piece.
+    const sweep = (params.transitionAngleDeg * Math.PI) / 180;
+    const deckOuterX = params.radius * Math.sin(sweep) + params.deckLength;
+    const expected = deckOuterX + params.joistThicknessMm / 1000 / 2;
+    expect(ribWidthValue).toBeCloseTo(Number(expected.toFixed(2)), 2);
+
+    const lengthValue = Number(dims[1].text.replace("m", ""));
+    expect(ribWidthValue).toBeLessThan(lengthValue / 2); // nowhere near half the overall length
+  });
+
+  it("grows the rib width dimension as joistThicknessMm grows — the base insets further away from the fixed deck edge, not toward it", () => {
+    const thin = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, joistThicknessMm: 30 });
+    const thick = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, joistThicknessMm: 90 });
+    const ribWidthOf = (dims: ReturnType<typeof buildHalfPipeDimensions>) => Number(dims[5].text.replace("m", ""));
+    expect(ribWidthOf(thick)).toBeGreaterThan(ribWidthOf(thin));
+  });
+
+  it("draws the rib width dimension's own offset line at the same corner the height dimension's offset line ends at, forming a corner bracket", () => {
+    const [heightDim, , , , , ribWidthDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+
+    // The offset dimension line itself is the 3rd Line child (see buildLinearDimension: the
+    // two extension lines, then the offset line connecting them).
+    const offsetLineEndpoints = (dim: ReturnType<typeof buildHalfPipeDimensions>[number]) => {
+      const offsetLine = dim.group.children[2] as THREE.Line;
+      const positions = offsetLine.geometry.getAttribute("position");
+      return [new THREE.Vector3().fromBufferAttribute(positions, 0), new THREE.Vector3().fromBufferAttribute(positions, 1)];
+    };
+
+    const [, heightLineTop] = offsetLineEndpoints(heightDim); // (-halfLength, height, -halfWidth+0.4)
+    const [, ribWidthLineEnd] = offsetLineEndpoints(ribWidthDim); // (-halfLength, height, -halfWidth+0.4)
+
+    expect(ribWidthLineEnd.distanceTo(heightLineTop)).toBeCloseTo(0, 6);
   });
 });

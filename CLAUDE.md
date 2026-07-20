@@ -1,9 +1,9 @@
 # half-pipe
 
-Browser app for planning skateboard ramp builds: pick a type (quarter-pipe,
-half-pipe), adjust its parameters via sliders, and see the 3D shape.
-Standalone — no terrain, no persistence (same posture as the sibling
-`../obstacle` project, deliberate: see [docs/decisions.md](docs/decisions.md)).
+Browser app for planning skateboard half-pipe builds: adjust its parameters
+via sliders, and see the 3D shape. Standalone — no terrain, no persistence
+(same posture as the sibling `../obstacle` project, deliberate: see
+[docs/decisions.md](docs/decisions.md)).
 
 ## Decisions
 
