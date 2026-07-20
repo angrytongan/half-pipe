@@ -5,7 +5,7 @@ import {
   buildHalfPipeJoists,
   buildHalfPipeRibs,
   HALF_PIPE_DEFAULTS,
-  halfPipeCopingXs,
+  halfPipeCopingCenters,
   halfPipeFootprint,
   type HalfPipeParams,
 } from "./ramps/halfPipe";
@@ -36,6 +36,7 @@ interface RampSpec<P> {
   joistSliders: SliderSpec[];
   bottomTransitionSliders: SliderSpec[];
   rampSliders: SliderSpec[];
+  copingSliders: SliderSpec[];
   buildRibs: (params: P) => THREE.BufferGeometry[];
   // Joist/ledger boxes — optional since a ramp type without any bays to bridge would have
   // nothing to build here.
@@ -43,9 +44,9 @@ interface RampSpec<P> {
   // The bottom transition's own framing (a stud wall lying on the ground) — optional since a
   // ramp type without one (e.g. quarter-pipe, once it rejoins) has nothing to build here.
   buildBottomTransitionFrame?: (params: P) => THREE.BufferGeometry[];
-  // X positions (in the built geometry's own centered coordinate space) of the coping
-  // tubes — the curve/deck lip, not the deck's outer edge. See decisions.md.
-  copingXs: (params: P) => number[];
+  // Centers (in the built geometry's own centered coordinate space) of the coping tubes —
+  // the curve/deck lip, not the deck's outer edge. See decisions.md.
+  copingCenters: (params: P) => { x: number; y: number }[];
   // Footprint this ramp actually needs, for the available-space validation below.
   footprint: (params: P) => Footprint;
   // CAD-style dimension lines (height, length, bottom transition length, rib spacing) —
@@ -69,6 +70,12 @@ const RAMPS: Record<RampType, RampSpec<any>> = {
       { key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.25 },
       { key: "internalStudCount", label: "Internal studs", min: 0, max: 20, step: 1 },
     ],
+    copingSliders: [
+      { key: "copingOdMm", label: "Pipe outside diameter (mm)", min: 30, max: 100, step: 0.1 },
+      { key: "copingIdMm", label: "Pipe inside diameter (mm)", min: 20, max: 90, step: 0.1 },
+      { key: "copingHorizontalProtrusionMm", label: "Horizontal protrusion (mm)", min: 0, max: 15, step: 0.1 },
+      { key: "copingVerticalProtrusionMm", label: "Vertical protrusion (mm)", min: 0, max: 15, step: 0.1 },
+    ],
     rampSliders: [
       { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
       { key: "transitionAngleDeg", label: "Transition angle (°)", min: 45, max: 90, step: 1 },
@@ -79,7 +86,7 @@ const RAMPS: Record<RampType, RampSpec<any>> = {
     buildRibs: (p: HalfPipeParams) => buildHalfPipeRibs(p),
     buildJoists: (p: HalfPipeParams) => buildHalfPipeJoists(p),
     buildBottomTransitionFrame: (p: HalfPipeParams) => buildBottomTransitionFrame(p),
-    copingXs: (p: HalfPipeParams) => halfPipeCopingXs(p),
+    copingCenters: (p: HalfPipeParams) => halfPipeCopingCenters(p),
     footprint: (p: HalfPipeParams) => halfPipeFootprint(p),
     buildDimensions: (p: HalfPipeParams) => buildHalfPipeDimensions(p),
   },
@@ -103,6 +110,7 @@ const spaceStatusEl = document.getElementById("space-status")!;
 const ribSlidersEl = document.getElementById("rib-sliders")!;
 const joistSlidersEl = document.getElementById("joist-sliders")!;
 const bottomTransitionSlidersEl = document.getElementById("bottom-transition-sliders")!;
+const copingSlidersEl = document.getElementById("coping-sliders")!;
 const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
 
@@ -148,21 +156,34 @@ scene.add(joistGroup);
 const bottomTransitionGroup = new THREE.Group(); // same lumber as the joists, so reuses joistMaterial
 scene.add(bottomTransitionGroup);
 
-const COPING_RADIUS = 0.03; // ~60mm schedule-40 steel pipe, the standard skate coping stock
 const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.4 });
 const copingGroup = new THREE.Group();
 scene.add(copingGroup);
 
-function rebuildCoping(type: RampType, deckY: number, params: unknown, width: number): void {
+/** A hollow tube (outer=odMm, inner=idMm), its length running along local Z, centered on all three axes. */
+function buildCopingTubeGeometry(idMm: number, odMm: number, spanWidth: number): THREE.BufferGeometry {
+  const outerRadius = odMm / 1000 / 2;
+  const innerRadius = idMm / 1000 / 2;
+  const shape = new THREE.Shape();
+  shape.absarc(0, 0, outerRadius, 0, Math.PI * 2, false);
+  const hole = new THREE.Path();
+  hole.absarc(0, 0, innerRadius, 0, Math.PI * 2, true);
+  shape.holes.push(hole);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: spanWidth, bevelEnabled: false, curveSegments: 32 });
+  geometry.translate(0, 0, -spanWidth / 2);
+  return geometry;
+}
+
+function rebuildCoping(type: RampType, params: HalfPipeParams, width: number): void {
   for (const child of copingGroup.children) {
     if (child instanceof THREE.Mesh) child.geometry.dispose();
   }
   copingGroup.clear();
 
-  for (const x of RAMPS[type].copingXs(params)) {
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(COPING_RADIUS, COPING_RADIUS, width, 16), copingMaterial);
-    tube.rotation.x = Math.PI / 2; // cylinder's local Y (its length) onto world Z, spanning the ramp's width
-    tube.position.set(x, deckY, 0);
+  const geometry = buildCopingTubeGeometry(params.copingIdMm, params.copingOdMm, width);
+  for (const { x, y } of RAMPS[type].copingCenters(params)) {
+    const tube = new THREE.Mesh(geometry, copingMaterial);
+    tube.position.set(x, y, 0);
     tube.castShadow = true;
     copingGroup.add(tube);
   }
@@ -295,8 +316,7 @@ function rebuildRamp(type: RampType): void {
     bottomTransitionGroup.add(member);
   }
 
-  const deckY = RAMPS[type].footprint(currentParams).height;
-  rebuildCoping(type, deckY, currentParams, currentParams.width);
+  rebuildCoping(type, currentParams, currentParams.width);
   rebuildDimensions(type, currentParams);
   renderSpaceStatus(type);
 }
@@ -334,6 +354,7 @@ function renderAllSliderGroups(type: RampType): void {
   renderSliderList(ribSlidersEl, RAMPS[type].ribSliders, currentParams, () => rebuildRamp(type));
   renderSliderList(joistSlidersEl, RAMPS[type].joistSliders, currentParams, () => rebuildRamp(type));
   renderSliderList(bottomTransitionSlidersEl, RAMPS[type].bottomTransitionSliders, currentParams, () => rebuildRamp(type));
+  renderSliderList(copingSlidersEl, RAMPS[type].copingSliders, currentParams, () => rebuildRamp(type));
   renderSliderList(rampSlidersEl, RAMPS[type].rampSliders, currentParams, () => rebuildRamp(type));
 }
 

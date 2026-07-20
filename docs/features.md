@@ -27,6 +27,19 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       `obstacle`'s dimension code has this either, and `buildLinearDimension`
       only handles straight measurements.
 
+## Joists
+
+- [ ] A correctly-placed joist at the deck/curve corner (deck start).
+      `buildHalfPipeJoists` (`src/ramps/halfPipe.ts`) dropped this landmark
+      entirely — tilted to the curve's own tangent there while anchored
+      exactly where the flat deck begins, its top face rose above the deck
+      surface on the deck side of its own centerline, physically
+      intersecting the deck it's supposed to sit under. The corner still
+      needs *some* joist (the deck and the topmost curve-interior joist
+      currently have a gap between them there); it just needs the right
+      shape/orientation, not the curve's tilted cross-section carried
+      straight through the corner.
+
 ## Ramps
 
 - [ ] Width taper — no request for this; real ramps are typically constant

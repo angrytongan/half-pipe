@@ -15,7 +15,7 @@ Two ramp types built, each a pure geometry builder in `src/ramps/`, sharing curv
   transition (`bottomTransitionLength`), independent decks on both outer
   edges. Shares `transition.ts`'s `transitionAndDeckPoints` with
   `quarterPipe.ts` so the two transitions can't drift apart. Also exports
-  `halfPipeCopingXs` and `halfPipeFootprint` (see Available space below).
+  `halfPipeCopingCenters` and `halfPipeFootprint` (see Available space below).
 
 `quarterPipe.ts` is currently unwired from the UI (see decisions.md) but
 still builds, still tested — `src/main.ts`'s `RampType` is `"halfPipe"`
@@ -125,17 +125,21 @@ section bay) pair:
   the bottom transition), evenly-spaced interior points up the curve
   (`transitionArcPoints` with a `segments` count computed so spacing never
   exceeds `CURVE_JOIST_SPACING_M` — 200mm, rounded from `research/design.md`'s
-  cited ~203mm for construction ease — and lands exactly on both ends, the
-  same trick `ribZPositions` uses for rib counts), the top corner (deck
-  start), and the end of the floor section (the deck's outer edge, the
-  ramp's own outer edge — the rib's outline terminates exactly there, with
-  no inset, unlike the bottom-corner end, so that one joist alone is inset
-  inward by half its own thickness, aligning its external face with the
-  rib's edge instead of centering the joist there and sticking half its
-  thickness out past where the rib actually ends). No joist under the
-  middle of the bottom transition — `buildBottomTransitionFrame`'s own
-  stud wall (top plate, bottom plate, two wall studs, optional internal
-  studs) covers that span instead.
+  cited ~203mm for construction ease — and lands exactly on the bottom
+  end, the same trick `ribZPositions` uses for rib counts), and the end of
+  the floor section (the deck's outer edge, the ramp's own outer edge —
+  the rib's outline terminates exactly there, with no inset, unlike the
+  bottom-corner end, so that one joist alone is inset inward by half its
+  own thickness, aligning its external face with the rib's edge instead of
+  centering the joist there and sticking half its thickness out past where
+  the rib actually ends). No joist at the deck/curve corner itself (deck
+  start) — tilted to the curve's own tangent there while anchored exactly
+  where the flat deck begins, its top face would rise above the deck
+  surface, physically intersecting it; needs a correctly-placed joist
+  there instead (see features.md). No joist under the middle of the
+  bottom transition — `buildBottomTransitionFrame`'s own stud wall (top
+  plate, bottom plate, two wall studs, optional internal studs) covers
+  that span instead.
 - **Build-section bays** reuse `ribZPositions`'s own output directly: its
   doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the
@@ -146,13 +150,12 @@ section bay) pair:
   inside faces, not their centerlines, matching how it'd actually be cut and
   fitted between them.
 - **Tilt**: `buildJoistBox` takes an optional `angle` (radians, about Z).
-  Joists on the curve (and the deck-start landmark, which is the curve's own
-  endpoint) are rotated to the local tangent angle — `transitionArcPoints`'s
-  parameter `t` *is* that angle — so their top face sits flush against the
-  curved skin instead of staying horizontal. The bottom-corner and
-  deck-outer landmarks are flat (angle 0) already, so they're unrotated. The
-  angle is mirrored (negated) on the left side to match the existing X
-  mirroring.
+  Joists on the curve are rotated to the local tangent angle —
+  `transitionArcPoints`'s parameter `t` *is* that angle — so their top face
+  sits flush against the curved skin instead of staying horizontal. The
+  bottom-corner and deck-outer landmarks are flat (angle 0) already, so
+  they're unrotated. The angle is mirrored (negated) on the left side to
+  match the existing X mirroring.
 - **Anchor**: `(x, y)` anchors the joist's *top* face, not its center — like
   a ceiling joist notched to a roofline, the top edge has to be coplanar
   with the rib curve at that point, with the joist's body hanging
@@ -164,6 +167,27 @@ section bay) pair:
 a distinct wood-toned material, so dozens of small joist boxes read as a
 different material from the blue ribs rather than visual noise.
 
+### Coping
+
+`src/ramps/coping.ts`'s `copingNotch` computes the notch cut into the rib at the deck/curve
+corner (see `research/coping.md` for the pipe stock and required protrusions it's modeled
+from) — two straight cuts, as it'd actually be built: a plumb wall and a horizontal shelf,
+both tangent to the pipe (not the wall fixed at the corner's own X — the pipe is much bigger
+than the protrusion specs, so it sits mostly recessed back under the deck, and a wall fixed at
+the corner would cut straight through it instead of meeting its rear face). The shelf's far
+end is found where the transition arc itself reaches shelf height, via an exact `acos`/`sin`
+circle intersection rather than the wall's tangent-line direction — at this radius/notch-size
+ratio a straight-line approximation would be off by a fraction of a millimeter, comparable to
+the protrusion spec itself. `halfPipe.ts`'s
+`halfPipeOutline` cuts this notch directly into the shared cross-section, so every rib and the
+solid wedge (`buildHalfPipeGeometry`) get it automatically. `halfPipeCopingCenters` returns
+each side's pipe center (`{x, y}`, mapped through the same mirroring as the outline), used to
+position the rendered coping tube — no longer just `deckStart` itself, since the pipe sits
+recessed into the notch rather than resting exactly on the corner. Four sliders in a "Coping"
+section (`copingOdMm`/`copingIdMm`, default 60.3mm/50.8mm; `copingHorizontalProtrusionMm`/
+`copingVerticalProtrusionMm`, default 3.2mm/6.4mm) drive it — see Scene below for the rendered
+tube itself.
+
 ## Dimension lines
 
 CAD-style dimension lines, first pass, half-pipe only. `src/dimensions/dimensionLine.ts`'s
@@ -174,8 +198,8 @@ copies `../obstacle`'s canvas-texture label-sprite approach (`createLabelSprite`
 the text, camera-facing, with no separate DOM overlay to get out of sync.
 
 `src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes five dimensions
-analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingXs` —
-no need to build the actual rib geometry just to measure it), all anchored to one edge rib
+analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingCenters`
+— no need to build the actual rib geometry just to measure it), all anchored to one edge rib
 since every rib is an identical copy of the others:
 
 - **Height** and **overall length** of one rib (ground to deck; deck to deck) — offset to
@@ -210,20 +234,21 @@ already does for the rib group and coping, called after every param change.
 raking directional light with shadows, a flat ground plane, flat-shaded
 solid-color ramp material (schematic style, no textures).
 
-**Coping tubes**: a small `THREE.CylinderGeometry` per transition/deck lip
-(steel-pipe gray, metalness/roughness material). X position comes from each
-ramp module's own `<name>CopingX(s)` function, not the geometry's bounding
-box — see decisions.md for why. Quarter-pipe gets one, half-pipe gets two.
+**Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
+`copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
+per transition/deck lip (steel-pipe gray, metalness/roughness material). Center comes from
+each ramp module's own `<name>CopingCenters` function, not the geometry's bounding box — see
+decisions.md for why. Quarter-pipe gets one, half-pipe gets two.
 
 `index.html` layout: an `.app-header` (skateboard icon, title, "in
 development" pill, GitHub link) matching `obstacle`'s header, above an
 `.app` flex row holding the `#panel` (type select at the top, the
 always-visible space-status pills below it, then a divider, then an
-accordion of five independently-collapsible sections — Available space,
-Ramp parameters, Ribs, Joists, Bottom transition, each a plain native
-`<details>`/`<summary>` so no JS is needed — then the reset button) and
-`#viewport` (3D view) cards. No method-select/BOM/tooltip UI this round —
-see features.md.
+accordion of six independently-collapsible sections — Available space,
+Ramp parameters, Ribs, Joists, Bottom transition, Coping, each a plain
+native `<details>`/`<summary>` so no JS is needed — then the reset button)
+and `#viewport` (3D view) cards. No method-select/BOM/tooltip UI this
+round — see features.md.
 
 ## Available space
 

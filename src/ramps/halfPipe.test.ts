@@ -5,13 +5,14 @@ import {
   buildHalfPipeGeometry,
   buildHalfPipeJoists,
   buildHalfPipeRibs,
-  halfPipeCopingXs,
+  halfPipeCopingCenters,
   halfPipeFootprint,
   HALF_PIPE_DEFAULTS,
 } from "./halfPipe";
 import { ribZPositions } from "./ribs";
 import { CURVE_JOIST_SPACING_M } from "./joists";
-import { transitionAndDeckPoints } from "./transition";
+import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
+import { copingNotch } from "./coping";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -134,6 +135,36 @@ describe("buildHalfPipeRibs", () => {
   });
 });
 
+describe("buildHalfPipeRibs coping notch", () => {
+  it("cuts the notch into the rib outline instead of meeting at a sharp deck/curve corner", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const jointDepth = params.joistDepthMm / 1000;
+    const half = params.bottomTransitionLength / 2;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const wallBottomWorld = { x: half + notch.wallBottom[0], y: notch.wallBottom[1] + jointDepth };
+    const shelfEndWorld = { x: half + notch.shelfEnd[0], y: notch.shelfEnd[1] + jointDepth };
+
+    const ribs = buildHalfPipeRibs(params);
+    const positions = ribs[ribs.length - 1].getAttribute("position");
+    const hasVertexNear = (x: number, y: number) => {
+      for (let i = 0; i < positions.count; i++) {
+        if (Math.abs(positions.getX(i) - x) < 1e-6 && Math.abs(positions.getY(i) - y) < 1e-6) return true;
+      }
+      return false;
+    };
+
+    expect(hasVertexNear(wallBottomWorld.x, wallBottomWorld.y)).toBe(true);
+    expect(hasVertexNear(shelfEndWorld.x, shelfEndWorld.y)).toBe(true);
+  });
+});
+
 describe("buildBottomTransitionFrame", () => {
   it("returns 2 plates + (internalStudCount + 2) studs", () => {
     const params = { ...HALF_PIPE_DEFAULTS, internalStudCount: 4 };
@@ -204,7 +235,7 @@ describe("buildHalfPipeJoists", () => {
     const curveArcLength = (radius * transitionAngleDeg * Math.PI) / 180;
     const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
     const curveInteriorCount = curveSegments - 1;
-    const pointsPerSide = curveInteriorCount + 3; // bottom corner, curve interior, top corner, floor-section end
+    const pointsPerSide = curveInteriorCount + 2; // bottom corner, curve interior, floor-section end — no deck/curve-corner joist (see features.md)
     const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
     const sections = internalRibCount + 1;
 
@@ -259,26 +290,32 @@ describe("buildHalfPipeJoists", () => {
     }
   });
 
-  it("tilts the curve/deck-start joists to the local tangent angle instead of staying flat", () => {
+  it("tilts curve-interior joists to their local tangent angle instead of staying flat", () => {
     const params = HALF_PIPE_DEFAULTS;
     const thickness = params.joistThicknessMm / 1000;
     const depth = params.joistDepthMm / 1000;
     const jointDepth = params.joistDepthMm / 1000;
     const sweep = (params.transitionAngleDeg * Math.PI) / 180;
-    const expectedX = thickness * Math.abs(Math.cos(sweep)) + depth * Math.abs(Math.sin(sweep));
-    const expectedY = thickness * Math.abs(Math.sin(sweep)) + depth * Math.abs(Math.cos(sweep));
+
+    const curveArcLength = params.radius * sweep;
+    const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
+    const curveInteriorPoints = transitionArcPoints(params.radius, params.transitionAngleDeg, curveSegments).slice(1, -1);
+    const lastInteriorIndex = curveInteriorPoints.length - 1;
+    const [localX, localY] = curveInteriorPoints[lastInteriorIndex];
+    const angle = ((lastInteriorIndex + 1) / curveSegments) * sweep;
+
+    const expectedX = thickness * Math.abs(Math.cos(angle)) + depth * Math.abs(Math.sin(angle));
+    const expectedY = thickness * Math.abs(Math.sin(angle)) + depth * Math.abs(Math.cos(angle));
 
     const half = params.bottomTransitionLength / 2;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
-    const [deckStartX, deckStartY] = points[points.length - 2];
-    const deckStartWorldX = half + deckStartX;
-    const deckStartWorldY = deckStartY + jointDepth;
+    const worldX = half + localX;
+    const worldY = localY + jointDepth;
     // The box's center sits depth/2 back from the anchored top edge, along the rotated normal
     // (-sin(angle), cos(angle)) — see buildJoistBox's own doc comment.
-    const expectedCenterX = deckStartWorldX + Math.sin(sweep) * (depth / 2);
-    const expectedCenterY = deckStartWorldY - Math.cos(sweep) * (depth / 2);
+    const expectedCenterX = worldX + Math.sin(angle) * (depth / 2);
+    const expectedCenterY = worldY - Math.cos(angle) * (depth / 2);
 
-    const deckStartJoist = buildHalfPipeJoists(params).find((joist) => {
+    const curveJoist = buildHalfPipeJoists(params).find((joist) => {
       joist.computeBoundingBox();
       const box = joist.boundingBox!;
       const x = (box.min.x + box.max.x) / 2;
@@ -286,10 +323,34 @@ describe("buildHalfPipeJoists", () => {
       return Math.abs(x - expectedCenterX) < 1e-6 && Math.abs(y - expectedCenterY) < 1e-6;
     });
 
-    expect(deckStartJoist).toBeDefined();
-    const box = deckStartJoist!.boundingBox!;
+    expect(curveJoist).toBeDefined();
+    const box = curveJoist!.boundingBox!;
     expect(box.max.x - box.min.x).toBeCloseTo(expectedX, 5);
     expect(box.max.y - box.min.y).toBeCloseTo(expectedY, 5);
+  });
+
+  it("no longer includes a joist at the deck/curve corner (deck start) — it intersected the deck; see features.md", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const depth = params.joistDepthMm / 1000;
+    const jointDepth = params.joistDepthMm / 1000;
+    const sweep = (params.transitionAngleDeg * Math.PI) / 180;
+    const half = params.bottomTransitionLength / 2;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const [deckStartX, deckStartY] = points[points.length - 2];
+    const deckStartWorldX = half + deckStartX;
+    const deckStartWorldY = deckStartY + jointDepth;
+    // Same anchor-to-center formula the removed joist would have used (see the tilt test above).
+    const expectedCenterX = deckStartWorldX + Math.sin(sweep) * (depth / 2);
+    const expectedCenterY = deckStartWorldY - Math.cos(sweep) * (depth / 2);
+
+    const atDeckStart = buildHalfPipeJoists(params).some((joist) => {
+      joist.computeBoundingBox();
+      const box = joist.boundingBox!;
+      const x = (box.min.x + box.max.x) / 2;
+      const y = (box.min.y + box.max.y) / 2;
+      return Math.abs(x - expectedCenterX) < 1e-6 && Math.abs(y - expectedCenterY) < 1e-6;
+    });
+    expect(atDeckStart).toBe(false);
   });
 
   it("insets the deck-outer joist so its external face aligns with the rib's own edge, not centered on it", () => {
@@ -317,19 +378,34 @@ describe("buildHalfPipeJoists", () => {
   });
 });
 
-describe("halfPipeCopingXs", () => {
-  it("places coping at each transition/deck boundary, inside the decks' outer edges", () => {
+describe("halfPipeCopingCenters", () => {
+  it("centers coping at the notch's pipe center on each side, inside the decks' outer edges", () => {
     // transitionAngleDeg/bottomTransitionLength pinned explicitly so this test's arithmetic
     // doesn't drift if HALF_PIPE_DEFAULTS' own values ever change.
     const params = { ...HALF_PIPE_DEFAULTS, transitionAngleDeg: 90, bottomTransitionLength: 3 };
     const geometry = buildHalfPipeGeometry(params);
     geometry.computeBoundingBox();
-    const [leftX, rightX] = halfPipeCopingXs(params);
 
-    expect(rightX).toBeCloseTo(3.3, 5); // half (1.5) + deckStart (radius=1.8)
-    expect(leftX).toBeCloseTo(-3.3, 5);
-    expect(rightX).toBeLessThan(geometry.boundingBox!.max.x);
-    expect(leftX).toBeGreaterThan(geometry.boundingBox!.min.x);
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const [cx, cy] = notch.pipeCenter;
+    const expectedY = cy + jointDepth;
+
+    const [left, right] = halfPipeCopingCenters(params);
+    expect(right.x).toBeCloseTo(half + cx, 6);
+    expect(left.x).toBeCloseTo(-(half + cx), 6);
+    expect(right.y).toBeCloseTo(expectedY, 6);
+    expect(left.y).toBeCloseTo(expectedY, 6);
+    expect(right.x).toBeLessThan(geometry.boundingBox!.max.x);
+    expect(left.x).toBeGreaterThan(geometry.boundingBox!.min.x);
   });
 });
 
