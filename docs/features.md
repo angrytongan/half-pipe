@@ -40,6 +40,19 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       shape/orientation, not the curve's tilted cross-section carried
       straight through the corner.
 
+## Coping
+
+- [ ] Reposition the notch's vertical cut once the ramp's actual riding
+      surface (the skin — see "Construction / BOM" above, not yet
+      modeled) is defined. `copingNotch` (`src/ramps/coping.ts`) currently
+      derives the wall's X from the pipe's own tangent point, which in
+      turn measures `copingHorizontalProtrusionMm` against the bare rib's
+      own corner point (`points[points.length - 2]` from
+      `transitionAndDeckPoints`) — a stand-in for where the finished ramp
+      surface will actually sit, since that surface doesn't exist yet.
+      The horizontal cut (shelf) is confirmed correct as-is; only the
+      vertical cut needs revisiting once the ramp surface is modeled.
+
 ## Ramps
 
 - [ ] Width taper — no request for this; real ramps are typically constant
