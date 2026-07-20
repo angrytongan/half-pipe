@@ -46,13 +46,6 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       The horizontal cut (shelf) is confirmed correct as-is; only the
       vertical cut needs revisiting once the ramp surface is modeled.
 
-## Scene / UI
-
-- [ ] Undo/redo for slider changes — no history stack exists yet;
-      `currentParams` (`src/main.ts`) is mutated in place by
-      `renderSliderList`'s `input` handler with no record of prior values.
-      This should be two buttons, at the top of the controls card.
-
 ## Ramps
 
 - [ ] Width taper — no request for this; real ramps are typically constant

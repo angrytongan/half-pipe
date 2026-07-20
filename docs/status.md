@@ -269,8 +269,8 @@ see decisions.md for why.
 
 `index.html` layout: an `.app-header` (skateboard icon, title, "in
 development" pill, GitHub link) matching `obstacle`'s header, above an
-`.app` flex row holding the `#panel` (the reset-view button and "Show
-dimensions" toggle at the top, then an accordion of six
+`.app` flex row holding the `#panel` (the undo/redo buttons, then the
+reset-view button and "Show dimensions" toggle, at the top, then an accordion of six
 independently-collapsible sections — Available space, Ramp parameters,
 Ribs, Joists, Bottom transition, Coping, each a plain native
 `<details>`/`<summary>` so no JS is needed — then the reset-to-defaults
@@ -303,6 +303,30 @@ setting disagreed with the chosen theme. The 3D viewport itself (sky/ground back
 ramp/joist/coping materials, dimension line/label
 colors) is unthemed — those represent a fixed outdoor daylight scene and physical materials,
 not app chrome.
+
+## Undo/redo
+
+`src/history.ts`'s `HistoryStack<T>` is a plain, DOM-free undo/redo stack (record/undo/redo/
+canUndo/canRedo over caller-supplied snapshots) — kept separate from `src/main.ts` so it's
+unit-testable without jsdom, the same reasoning behind keeping `dimensionLine.ts`'s math
+DOM-free. `src/main.ts` instantiates one `HistoryStack<AppSnapshot>`, where an `AppSnapshot` is
+a clone of both `currentParams` and the available-space sliders' state together — undo/redo
+covers every slider in the app on one shared stack, including the available-space group, not
+just the per-ramp-type ones.
+
+Each slider's `<input>` (built by `renderSliderList`) records a history entry on its native
+`change` event (fires once per drag-release or per keyboard step), not on every `input` tick —
+so dragging a slider end to end is one undo step, not dozens. A module-level `pendingSnapshot`,
+set on the *first* `input` event of a drag and cleared on `change`, captures the pre-drag state
+for that entry; since it's a single shared variable rather than per-slider, `bindDiameterBound`'s
+synthetic clamp-cascade `input` event (see Coping above) rides along in the same pending
+snapshot/undo step as the drag that triggered it, instead of creating its own.
+
+`resetParams` (`#reset-btn`) also records an undo entry before applying `HALF_PIPE_DEFAULTS`,
+so "Reset to defaults" itself can be undone; the initial page-load render uses a separate
+`applyDefaults` (no history recording), so the undo stack starts empty. The `#undo-btn`/
+`#redo-btn` pair sits at the very top of `#panel`, disabled via `HistoryStack`'s
+`canUndo`/`canRedo` whenever their respective stack is empty.
 
 ## Available space
 
