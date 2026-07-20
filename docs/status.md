@@ -127,9 +127,16 @@ section bay) pair:
   exceeds `CURVE_JOIST_SPACING_M` — 200mm, rounded from `research/design.md`'s
   cited ~203mm for construction ease — and lands exactly on both ends, the
   same trick `ribZPositions` uses for rib counts), the top corner (deck
-  start), and the end of the floor section (the deck's outer edge). No
-  joist under the middle of the bottom transition — that's
-  `buildBottomTransitionFrame`'s own studs' job, not a joist's.
+  start), and the end of the floor section (the deck's outer edge, the
+  ramp's own outer edge — the rib's outline terminates exactly there, with
+  no inset, unlike the bottom-corner end, so that one joist alone is inset
+  inward by half its own thickness, aligning its external face with the
+  rib's edge instead of centering the joist there and sticking half its
+  thickness out past where the rib actually ends).
+- One extra joist, not mirrored, centered at `x=0` — equidistant between
+  the two bottom-corner joists, supporting the ribs under the middle of
+  the bottom transition. A different job from `buildBottomTransitionFrame`'s
+  own studs, which support the frame itself, not the ribs.
 - **Build-section bays** reuse `ribZPositions`'s own output directly: its
   doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the

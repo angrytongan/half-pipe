@@ -140,9 +140,12 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
  * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
  * evenly-spaced interior points up the curve (≤ CURVE_JOIST_SPACING_M apart, exact at both
  * ends — the same trick ribZPositions uses for rib counts), top corner (deck start), and the
- * end of the floor section (deck's outer edge). No joist under the middle of the bottom
- * transition — that's buildBottomTransitionFrame's own studs, not a joist. Section bays reuse
- * ribZPositions's own output: its doubled-seam ribs already pair up as
+ * end of the floor section (deck's outer edge, the ramp's own outer edge — the rib's outline
+ * terminates exactly there, with no inset, unlike the bottom-corner end). Plus one extra
+ * joist, not mirrored, centered at `x=0` — equidistant between the two bottom-corner joists,
+ * supporting the ribs under the middle of the bottom transition (a different job from
+ * buildBottomTransitionFrame's own studs, which support the frame, not the ribs). Section bays
+ * reuse ribZPositions's own output: its doubled-seam ribs already pair up as
  * (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per pair, so no separate bay-finding
  * logic is needed — a joist only bridges a real section bay, never the near-zero gap inside
  * a doubled seam (those two ribs are already face-to-face and screwed together directly).
@@ -170,9 +173,15 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   // flat on the deck floor (0) — see transitionAndDeckPoints for why deckStart/deckOuter differ.
   const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, deckStart, deckOuter];
   const localAngles: number[] = [0, ...curveInteriorAngles, sweep, 0];
+  // The deck-outer landmark is the ramp's own outer edge, where the rib's outline ends flush
+  // (no inset) — so that one joist alone is inset inward by half its own thickness, aligning
+  // its external face with the rib's edge instead of centering the joist on it and sticking
+  // half its thickness out past where the rib actually ends.
+  const inwardInset = localPoints.map((_, i) => (i === localPoints.length - 1 ? thickness / 2 : 0));
   const worldJoists: { x: number; y: number; angle: number }[] = [
-    ...localPoints.map(([x, y], i) => ({ x: -half - x, y: y + jointDepth, angle: -localAngles[i] })),
-    ...localPoints.map(([x, y], i) => ({ x: half + x, y: y + jointDepth, angle: localAngles[i] })),
+    { x: 0, y: jointDepth, angle: 0 }, // extra joist, equidistant between the two bottom corners
+    ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
+    ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),
   ];
 
   const ribZs = ribZPositions(width, internalRibCount, ribThickness);

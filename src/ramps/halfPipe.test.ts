@@ -205,7 +205,7 @@ describe("buildHalfPipeJoists", () => {
     const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
     const curveInteriorCount = curveSegments - 1;
     const pointsPerSide = curveInteriorCount + 3; // bottom corner, curve interior, top corner, floor-section end
-    const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
+    const perSection = 2 * pointsPerSide + 1; // both sides, plus the equidistant joist
     const sections = internalRibCount + 1;
 
     expect(buildHalfPipeJoists(HALF_PIPE_DEFAULTS)).toHaveLength(perSection * sections);
@@ -233,14 +233,14 @@ describe("buildHalfPipeJoists", () => {
     }
   });
 
-  it("no longer includes a joist midway between the ramp ends (x=0) — that's the bottom-transition frame's job now", () => {
+  it("includes one joist centered at x=0, equidistant between the two bottom corners, supporting the ribs there", () => {
     const joists = buildHalfPipeJoists(HALF_PIPE_DEFAULTS);
     const atCenter = joists.some((joist) => {
       joist.computeBoundingBox();
       const box = joist.boundingBox!;
       return Math.abs((box.min.x + box.max.x) / 2) < 1e-9;
     });
-    expect(atCenter).toBe(false);
+    expect(atCenter).toBe(true);
   });
 
   it("sizes the flat landmarks (bottom corners) exactly joistThicknessMm (X) x joistDepthMm (Y)", () => {
@@ -290,6 +290,30 @@ describe("buildHalfPipeJoists", () => {
     const box = deckStartJoist!.boundingBox!;
     expect(box.max.x - box.min.x).toBeCloseTo(expectedX, 5);
     expect(box.max.y - box.min.y).toBeCloseTo(expectedY, 5);
+  });
+
+  it("insets the deck-outer joist so its external face aligns with the rib's own edge, not centered on it", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const [deckOuterX, deckOuterY] = points[points.length - 1];
+    const jointDepth = params.joistDepthMm / 1000;
+    const deckOuterWorldY = deckOuterY + jointDepth;
+    const deckOuterWorldXRight = half + deckOuterX; // where the rib's outline actually ends
+
+    const joists = buildHalfPipeJoists(params).filter((joist) => {
+      joist.computeBoundingBox();
+      // unrotated (angle=0), so the top-anchored face is the box's max.y directly.
+      return Math.abs(joist.boundingBox!.max.y - deckOuterWorldY) < 1e-6;
+    });
+    const rightJoist = joists.find((joist) => (joist.boundingBox!.min.x + joist.boundingBox!.max.x) / 2 > 0);
+    const leftJoist = joists.find((joist) => (joist.boundingBox!.min.x + joist.boundingBox!.max.x) / 2 < 0);
+    expect(rightJoist).toBeDefined();
+    expect(leftJoist).toBeDefined();
+
+    // external (outward-facing) face flush with the rib's edge — not straddling it
+    expect(rightJoist!.boundingBox!.max.x).toBeCloseTo(deckOuterWorldXRight, 6);
+    expect(leftJoist!.boundingBox!.min.x).toBeCloseTo(-deckOuterWorldXRight, 6);
   });
 });
 

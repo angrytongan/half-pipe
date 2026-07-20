@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { centerFootprint } from "./util";
 
 // User-adjustable via the ribThicknessMm slider in main.ts.
-export const RIB_THICKNESS_MM = 10;
+export const RIB_THICKNESS_MM = 19;
 
 /**
  * Z positions for ribs evenly spaced across width: always two single edge ribs (mandatory —

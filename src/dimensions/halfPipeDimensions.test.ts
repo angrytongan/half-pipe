@@ -11,12 +11,12 @@ describe("buildHalfPipeDimensions", () => {
     // length: bottomTransitionLength + 2 * (radius * sin(57deg) + deckLength)
     // bottom transition: bottomTransitionLength itself
     // spacing: inside surface to inside surface, not centerline — the centerline gap (edge rib
-    // to the near rib of the doubled seam, 1.49m — the edge rib is itself inset half its own
-    // thickness in from width/2) minus one full rib thickness (ribThicknessMm/1000 = 0.01m),
+    // to the near rib of the doubled seam, 1.481m — the edge rib is itself inset half its own
+    // thickness in from width/2) minus one full rib thickness (ribThicknessMm/1000 = 0.019m),
     // since each rib eats half its own thickness into the gap
     // width: outside surface to outside surface, which is exactly the width param — the edge
     // ribs are inset (see ribZPositions) so the structure has no overhang past it
-    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.48m", "3.00m"]);
+    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.46m", "3.00m"]);
   });
 
   it("computes width as exactly the width param (edge ribs are inset, no overhang), and rib spacing as the centerline gap minus one rib thickness", () => {
@@ -49,7 +49,7 @@ describe("buildHalfPipeDimensions", () => {
 
   it("measures rib spacing as the width minus two rib thicknesses when there are no internal ribs (both edge ribs are now fully inset)", () => {
     const dims = buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0, width: 2.4 });
-    expect(dims[3].text).toBe("2.38m"); // 2.4 - 2 * 0.01 (default ribThicknessMm 10)
+    expect(dims[3].text).toBe("2.36m"); // 2.4 - 2 * 0.019 (default ribThicknessMm 19)
   });
 
   it("relabels the bottom transition length dimension as bottomTransitionLength changes", () => {
