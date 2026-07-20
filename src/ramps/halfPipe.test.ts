@@ -205,7 +205,7 @@ describe("buildHalfPipeJoists", () => {
     const curveSegments = Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M);
     const curveInteriorCount = curveSegments - 1;
     const pointsPerSide = curveInteriorCount + 3; // bottom corner, curve interior, top corner, floor-section end
-    const perSection = 2 * pointsPerSide + 1; // both sides, plus the equidistant joist
+    const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
     const sections = internalRibCount + 1;
 
     expect(buildHalfPipeJoists(HALF_PIPE_DEFAULTS)).toHaveLength(perSection * sections);
@@ -233,14 +233,14 @@ describe("buildHalfPipeJoists", () => {
     }
   });
 
-  it("includes one joist centered at x=0, equidistant between the two bottom corners, supporting the ribs there", () => {
+  it("no longer includes a joist midway between the ramp ends (x=0) — the bottom-transition frame's stud wall covers that span instead", () => {
     const joists = buildHalfPipeJoists(HALF_PIPE_DEFAULTS);
     const atCenter = joists.some((joist) => {
       joist.computeBoundingBox();
       const box = joist.boundingBox!;
       return Math.abs((box.min.x + box.max.x) / 2) < 1e-9;
     });
-    expect(atCenter).toBe(true);
+    expect(atCenter).toBe(false);
   });
 
   it("sizes the flat landmarks (bottom corners) exactly joistThicknessMm (X) x joistDepthMm (Y)", () => {

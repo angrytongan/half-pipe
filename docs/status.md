@@ -132,11 +132,10 @@ section bay) pair:
   no inset, unlike the bottom-corner end, so that one joist alone is inset
   inward by half its own thickness, aligning its external face with the
   rib's edge instead of centering the joist there and sticking half its
-  thickness out past where the rib actually ends).
-- One extra joist, not mirrored, centered at `x=0` — equidistant between
-  the two bottom-corner joists, supporting the ribs under the middle of
-  the bottom transition. A different job from `buildBottomTransitionFrame`'s
-  own studs, which support the frame itself, not the ribs.
+  thickness out past where the rib actually ends). No joist under the
+  middle of the bottom transition — `buildBottomTransitionFrame`'s own
+  stud wall (top plate, bottom plate, two wall studs, optional internal
+  studs) covers that span instead.
 - **Build-section bays** reuse `ribZPositions`'s own output directly: its
   doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the

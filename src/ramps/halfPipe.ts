@@ -141,11 +141,10 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
  * evenly-spaced interior points up the curve (≤ CURVE_JOIST_SPACING_M apart, exact at both
  * ends — the same trick ribZPositions uses for rib counts), top corner (deck start), and the
  * end of the floor section (deck's outer edge, the ramp's own outer edge — the rib's outline
- * terminates exactly there, with no inset, unlike the bottom-corner end). Plus one extra
- * joist, not mirrored, centered at `x=0` — equidistant between the two bottom-corner joists,
- * supporting the ribs under the middle of the bottom transition (a different job from
- * buildBottomTransitionFrame's own studs, which support the frame, not the ribs). Section bays
- * reuse ribZPositions's own output: its doubled-seam ribs already pair up as
+ * terminates exactly there, with no inset, unlike the bottom-corner end). No joist under the
+ * middle of the bottom transition — buildBottomTransitionFrame's own stud wall (top plate,
+ * bottom plate, two wall studs, optional internal studs) covers that span instead. Section
+ * bays reuse ribZPositions's own output: its doubled-seam ribs already pair up as
  * (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per pair, so no separate bay-finding
  * logic is needed — a joist only bridges a real section bay, never the near-zero gap inside
  * a doubled seam (those two ribs are already face-to-face and screwed together directly).
@@ -179,7 +178,6 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   // half its thickness out past where the rib actually ends.
   const inwardInset = localPoints.map((_, i) => (i === localPoints.length - 1 ? thickness / 2 : 0));
   const worldJoists: { x: number; y: number; angle: number }[] = [
-    { x: 0, y: jointDepth, angle: 0 }, // extra joist, equidistant between the two bottom corners
     ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
     ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),
   ];
