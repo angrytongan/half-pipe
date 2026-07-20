@@ -100,6 +100,9 @@ const bottomTransitionSlidersEl = document.getElementById("bottom-transition-sli
 const copingSlidersEl = document.getElementById("coping-sliders")!;
 const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
+const resetViewBtn = document.getElementById("reset-view-btn")!;
+const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
+const themeToggle = document.getElementById("theme-toggle")!;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xdfe9f0);
@@ -323,6 +326,7 @@ function renderSliderList(container: HTMLElement, specs: SliderSpec[], state: Re
     input.max = String(spec.max);
     input.step = String(spec.step);
     input.value = String(state[spec.key]);
+    input.dataset.key = spec.key;
     input.addEventListener("input", () => {
       state[spec.key] = Number(input.value);
       valueSpan.textContent = input.value;
@@ -332,6 +336,15 @@ function renderSliderList(container: HTMLElement, specs: SliderSpec[], state: Re
     row.append(label, input);
     container.append(row);
   }
+}
+
+/** Keeps a range input's bound in sync with another's value — e.g. coping ID can never exceed OD — by writing the native min/max attribute (so the browser itself won't let the knob cross it) and, if that clamps the target's value, replaying the target's own input event so its label/state/rebuild wiring stays in sync. The before/after check stops the two listeners from ping-ponging. */
+function bindDiameterBound(source: HTMLInputElement, target: HTMLInputElement, boundAttr: "min" | "max"): void {
+  source.addEventListener("input", () => {
+    const before = target.value;
+    target[boundAttr] = source.value;
+    if (target.value !== before) target.dispatchEvent(new Event("input"));
+  });
 }
 
 function renderAllSliderGroups(): void {
@@ -344,6 +357,11 @@ function renderAllSliderGroups(): void {
   renderSliderList(bottomTransitionSlidersEl, RAMP.bottomTransitionSliders, state, rebuildRamp);
   renderSliderList(copingSlidersEl, RAMP.copingSliders, state, rebuildRamp);
   renderSliderList(rampSlidersEl, RAMP.rampSliders, state, rebuildRamp);
+
+  const odInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingOdMm"]')!;
+  const idInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingIdMm"]')!;
+  bindDiameterBound(odInput, idInput, "max");
+  bindDiameterBound(idInput, odInput, "min");
 }
 
 function resetParams(): void {
@@ -352,7 +370,31 @@ function resetParams(): void {
   rebuildRamp();
 }
 
+function resetView(): void {
+  camera.position.set(6, 4, 7);
+  controls.target.set(0, 0.6, 0);
+  controls.update();
+}
+
+/** The inline head script (index.html) already picked the initial theme (stored preference, falling back to system) before this module ran, so this only reflects it in the toggle's glyph and handles switching. */
+function renderThemeToggle(): void {
+  const isDark = document.documentElement.dataset.theme === "dark";
+  themeToggle.textContent = isDark ? "☀️" : "🌙";
+}
+
+themeToggle.addEventListener("click", () => {
+  const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = next;
+  localStorage.setItem("theme", next);
+  renderThemeToggle();
+});
+renderThemeToggle();
+
 resetBtn.addEventListener("click", resetParams);
+resetViewBtn.addEventListener("click", resetView);
+dimensionsToggle.addEventListener("input", () => {
+  dimensionsGroup.visible = dimensionsToggle.checked;
+});
 renderSliderList(spaceSlidersEl, AVAILABLE_SPACE_SLIDERS, availableSpace, renderSpaceStatus);
 resetParams();
 

@@ -181,6 +181,15 @@ section (`copingOdMm`/`copingIdMm`, default 60.3mm/50.8mm; `copingHorizontalProt
 `copingVerticalProtrusionMm`, default 3.2mm/6.4mm) drive it — see Scene below for the rendered
 tube itself.
 
+The OD and ID sliders can't cross: `src/main.ts`'s `renderSliderList` tags each `<input>` with
+`dataset.key = spec.key` so a slider can be looked up later, and `bindDiameterBound` (also
+`main.ts`) wires each of the two coping sliders' `input` events to tighten the *other's* native
+`min`/`max` attribute to its own current value. The browser itself then won't let the knob cross
+that bound; if setting the attribute clamps the other input's `.value`, a synthetic `input` event
+is dispatched on it so the existing per-slider state-sync/rebuild wiring still fires (a
+before/after `.value` check stops the two listeners from ping-ponging). Re-wired every time the
+coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to defaults").
+
 ## Dimension lines
 
 CAD-style dimension lines, first pass, half-pipe only. `src/dimensions/dimensionLine.ts`'s
@@ -226,6 +235,10 @@ since every rib is an identical copy of the others:
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.
 
+A "Show dimensions" checkbox (`#dimensions-toggle`, top of `#panel`) toggles
+`dimensionsGroup.visible` directly — no rebuild involved, since the group and its contents
+already exist regardless of visibility.
+
 ## Scene
 
 `src/main.ts`: `PerspectiveCamera` + stock `OrbitControls` (no damping,
@@ -243,6 +256,11 @@ retune uniformly. Ambient + raking directional light with shadows, a
 flat ground plane, flat-shaded solid-color ramp material (schematic
 style, no textures).
 
+A "Reset view" button (`#reset-view-btn`, top of `#panel`) re-applies the initial
+`camera.position`/`controls.target` values, independent of "Reset to defaults" (which only
+touches ramp parameters, never the camera) — orbiting can leave the camera anywhere, and this is
+the one control that always brings it back.
+
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
 per transition/deck lip (steel-pipe gray, metalness/roughness material), one per side — a
@@ -251,26 +269,53 @@ see decisions.md for why.
 
 `index.html` layout: an `.app-header` (skateboard icon, title, "in
 development" pill, GitHub link) matching `obstacle`'s header, above an
-`.app` flex row holding the `#panel` (the always-visible space-status
-pills at the top, then a divider, then an accordion of six
+`.app` flex row holding the `#panel` (the reset-view button and "Show
+dimensions" toggle at the top, then an accordion of six
 independently-collapsible sections — Available space, Ramp parameters,
 Ribs, Joists, Bottom transition, Coping, each a plain native
-`<details>`/`<summary>` so no JS is needed — then the reset button) and
-`#viewport` (3D view) cards. No type-select (half-pipe is the only ramp
-type — see decisions.md) or method-select/BOM/tooltip UI this round —
+`<details>`/`<summary>` so no JS is needed — then the reset-to-defaults
+button) and `#viewport` (3D view) cards. Both share a `.card` class
+(border/radius/shadow/opaque background — `var(--card-bg)`); `#viewport`
+additionally hosts a small `.overlay-card` (the space-status pills,
+top-left), positioned absolutely inside it (`position: relative` on
+`#viewport`) so it stays in view over the 3D scene regardless of panel
+state. `.overlay-card` carries `class="card overlay-card"` and adds no
+background of its own — it inherits `.card`'s, so it's always exactly the
+same color as `#panel`, opaque enough to stay legible over whatever's
+rendered behind it in the canvas. No type-select (half-pipe is the only
+ramp type — see decisions.md) or method-select/BOM/tooltip UI this round —
 see features.md.
+
+**Dark/light mode**: a `#theme-toggle` button in the header (next to the GitHub link, 🌙/☀️
+glyph swapped by `renderThemeToggle` in `src/main.ts`) flips `document.documentElement.dataset.theme`
+between `"light"`/`"dark"` and persists the choice to `localStorage`. All chrome colors
+(`--bg`, `--text`, `--border`, `--card-bg`, `--shadow`, plus the pill/space-status tint
+variables) are CSS custom properties on `:root`, overridden by `:root[data-theme="light"]`/
+`:root[data-theme="dark"]` blocks in `index.html` — no `prefers-color-scheme` media query in
+CSS, since a small inline `<script>` in `<head>` (runs before first paint, so no flash) resolves
+the initial theme once: `localStorage`'s stored value if present, else the system
+`prefers-color-scheme`. Both `[data-theme]` blocks also pin `color-scheme` explicitly (`light`/
+`dark`) rather than leaving it at `:root`'s base `light dark` — native form controls (buttons,
+checkboxes, range sliders, `<details>` markers) follow `color-scheme` themselves, so without an
+explicit per-theme value they'd keep following the OS preference even after the in-app toggle
+overrides it, showing dark-mode chrome on a light-themed page (or vice versa) whenever the OS
+setting disagreed with the chosen theme. The 3D viewport itself (sky/ground background,
+ramp/joist/coping materials, dimension line/label
+colors) is unthemed — those represent a fixed outdoor daylight scene and physical materials,
+not app chrome.
 
 ## Available space
 
 Split across two places in `index.html` so the warning can't be hidden by
-collapsing a section: a row of status pills (`#space-status`), comparing
-the three sliders below against `halfPipeFootprint(currentParams)` on
-every render, sits directly under the type select — always visible,
-outside any `<details>` — green "7.80m / 8.00m" when it fits, red
-"17.20m / 8.00m — over by 9.20m" when it doesn't. Doesn't block rendering
-either way — see decisions.md. The three sliders themselves (available
-length/width/height, `AVAILABLE_SPACE_SLIDERS` in `src/main.ts`) live in
-the collapsible "Available space" accordion section below it.
+collapsing a section or scrolling: a row of status pills (`#space-status`),
+comparing the three sliders below against `halfPipeFootprint(currentParams)`
+on every render, lives in its own `.overlay-card` on top of `#viewport`
+(see Scene above) rather than in `#panel` — always visible
+regardless of panel scroll position — green "7.80m / 8.00m" when it fits,
+red "17.20m / 8.00m — over by 9.20m" when it doesn't. Doesn't block
+rendering either way — see decisions.md. The three sliders themselves
+(available length/width/height, `AVAILABLE_SPACE_SLIDERS` in `src/main.ts`)
+live in the collapsible "Available space" accordion section in `#panel`.
 `renderSliderList` in `src/main.ts` is the slider-row builder shared
 between this and the per-ramp-type sliders (factored out of what was
 previously `renderSliders`).
@@ -282,5 +327,8 @@ already matches what's actually rendered.
 
 ## Deployment
 
-Not set up — `half-pipe` isn't a git repository yet, so there's no remote to
-publish a GitHub Pages build to. See features.md.
+`.github/workflows/deploy.yml` builds and publishes `dist/` to GitHub Pages on every push to
+`main` (`actions/upload-pages-artifact` + `actions/deploy-pages`), copied from `../maketrail`'s
+workflow. `vite.config.ts`'s `base` is `/half-pipe/` when `GITHUB_ACTIONS` is set (matching this
+repo's GitHub Pages project-page path) and `/` otherwise, so local `dev`/`preview` stay at the
+root.

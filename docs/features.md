@@ -28,6 +28,10 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       currently have a gap between them there); it just needs the right
       shape/orientation, not the curve's tilted cross-section carried
       straight through the corner.
+- [ ] A joist needs to be present between two ribs at the bottom rear corner of each rib
+      at ground level.
+- [ ] A joist needs to be present at the half-way point of the width of the rib
+      at ground level.
 
 ## Coping
 
@@ -44,15 +48,10 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Scene / UI
 
-- [ ] Reset view — recenter the camera/`controls.target` back to the
-      initial framing (`camera.position.set(6, 4, 7)`,
-      `controls.target.set(0, 0.6, 0)`), independent of "Reset to
-      defaults" (`#reset-btn` in `index.html`/`main.ts`), which only
-      resets the ramp *parameters*, not the camera. Orbiting (see
-      status.md's Scene section) can leave the camera anywhere.
 - [ ] Undo/redo for slider changes — no history stack exists yet;
       `currentParams` (`src/main.ts`) is mutated in place by
       `renderSliderList`'s `input` handler with no record of prior values.
+      This should be two buttons, at the top of the controls card.
 
 ## Ramps
 
@@ -60,9 +59,3 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       width.
 - [ ] Asymmetric half-pipe (independent radius/angle per side) — no request
       for this either.
-
-## Deployment
-
-- [ ] Git init + GitHub Pages workflow (`.github/workflows/deploy.yml`,
-      `vite.config.ts`'s `base:` path) once there's a remote to publish to —
-      see `../obstacle`'s workflow for the template.
