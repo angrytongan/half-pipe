@@ -115,24 +115,46 @@ length vertical" means the deeper dimension
 section bay) pair:
 
 - **Landmarks per side**: the bottom corner (curve tangent, where it meets
-  the bottom transition), evenly-spaced interior points up the curve
-  (`transitionArcPoints` with a `segments` count computed so spacing never
-  exceeds `CURVE_JOIST_SPACING_M` — 200mm, rounded from `research/design.md`'s
-  cited ~203mm for construction ease — and lands exactly on the bottom
-  end, the same trick `ribZPositions` uses for rib counts), and the end of
-  the floor section (the deck's outer edge, the ramp's own outer edge —
-  the rib's outline terminates exactly there, with no inset, unlike the
+  the bottom transition), `internalCurveJoistCount` interior points up the
+  curve (default 8, "Internal curve joists" slider in the "Joists"
+  section — controls only what's added *between* the bottom-corner and
+  notch-shelf joists; those two are always present regardless of its
+  value), the coping notch's own shelf point, and the end of the floor
+  section (the deck's outer edge, the ramp's own outer edge — the rib's
+  outline terminates exactly there, with no inset, unlike the
   bottom-corner end, so that one joist alone is inset inward by half its
-  own thickness, aligning its external face with the rib's edge instead of
-  centering the joist there and sticking half its thickness out past where
-  the rib actually ends). No joist at the deck/curve corner itself (deck
-  start) — tilted to the curve's own tangent there while anchored exactly
-  where the flat deck begins, its top face would rise above the deck
-  surface, physically intersecting it; needs a correctly-placed joist
-  there instead (see features.md). No joist under the middle of the
-  bottom transition — `buildBottomTransitionFrame`'s own stud wall (top
-  plate, bottom plate, two wall studs, optional internal studs) covers
-  that span instead.
+  own thickness, aligning its external face with the rib's edge instead
+  of centering the joist there and sticking half its thickness out past
+  where the rib actually ends). No joist at the deck/curve corner itself
+  (deck start) — tilted to the curve's own tangent there while anchored
+  exactly where the flat deck begins, its top face would rise above the
+  deck surface, physically intersecting it. The topmost curve joist is
+  anchored at `copingNotch`'s `shelfEnd`/`shelfAngle` instead
+  (`src/ramps/coping.ts`) — a point solved exactly to sit on the curve
+  itself, at the height where the notch's own horizontal shelf cut meets
+  it. `shelfAngle` is the arc parameter at that point, which (like every
+  other curve-interior landmark here) doubles as its own tangent angle.
+  Like the deck-outer landmark above, this one is inset — backward along
+  its own tangent, by half the joist thickness, the same "flush face, not
+  centered" convention — so it's the joist's *notch-side* corner, not its
+  center, that lands exactly on `shelfEnd`: past that corner the rib's
+  already cut away into the notch, so a centered joist would have nothing
+  to sit flush against on that side. Sitting below/behind the corner,
+  inside the notch, it can't rise above the deck the way the
+  corner-anchored version did. The `internalCurveJoistCount` interior
+  points are spaced *evenly by arc length between the two boundary
+  joists' own edges* — the bottom-most joist's inside (uphill) edge and
+  the topmost joist's bottom (downhill) edge — not their anchor points:
+  spacing center-to-center would double-count half of each boundary
+  joist's own thickness at either end. Each edge is a `thickness/2`
+  tangential offset from its joist's anchor, converted to an angle via
+  arc length (`Δt = (thickness/2) / radius`, exact for a circular arc);
+  the interior points then split that `[start, end]` angle range into
+  `internalCurveJoistCount + 1` equal gaps, same convention
+  `ribZPositions`/`inwardInset` already use elsewhere. No joist under the
+  middle of the bottom transition — `buildBottomTransitionFrame`'s own
+  stud wall (top plate, bottom plate, two wall studs, optional internal
+  studs) covers that span instead.
 - **Build-section bays** reuse `ribZPositions`'s own output directly: its
   doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the
@@ -171,7 +193,10 @@ the corner would cut straight through it instead of meeting its rear face). The 
 end is found where the transition arc itself reaches shelf height, via an exact `acos`/`sin`
 circle intersection rather than the wall's tangent-line direction — at this radius/notch-size
 ratio a straight-line approximation would be off by a fraction of a millimeter, comparable to
-the protrusion spec itself. `halfPipe.ts`'s
+the protrusion spec itself. That same arc parameter is returned as `shelfAngle` (it doubles as
+its own tangent angle, like every other curve landmark in this codebase) — `buildHalfPipeJoists`
+reuses `shelfEnd`/`shelfAngle` together to anchor the topmost curve joist (see Joists above).
+`halfPipe.ts`'s
 `halfPipeOutline` cuts this notch directly into the shared cross-section, so every rib and the
 solid wedge (`buildHalfPipeGeometry`) get it automatically. `halfPipeCopingCenters` returns
 each side's pipe center (`{x, y}`, mapped through the same mirroring as the outline), used to
@@ -269,8 +294,8 @@ see decisions.md for why.
 
 `index.html` layout: an `.app-header` (skateboard icon, title, "in
 development" pill, GitHub link) matching `obstacle`'s header, above an
-`.app` flex row holding the `#panel` (the reset-view button and "Show
-dimensions" toggle at the top, then an accordion of six
+`.app` flex row holding the `#panel` (the undo/redo buttons, then the
+reset-view button and "Show dimensions" toggle, at the top, then an accordion of six
 independently-collapsible sections — Available space, Ramp parameters,
 Ribs, Joists, Bottom transition, Coping, each a plain native
 `<details>`/`<summary>` so no JS is needed — then the reset-to-defaults
@@ -303,6 +328,30 @@ setting disagreed with the chosen theme. The 3D viewport itself (sky/ground back
 ramp/joist/coping materials, dimension line/label
 colors) is unthemed — those represent a fixed outdoor daylight scene and physical materials,
 not app chrome.
+
+## Undo/redo
+
+`src/history.ts`'s `HistoryStack<T>` is a plain, DOM-free undo/redo stack (record/undo/redo/
+canUndo/canRedo over caller-supplied snapshots) — kept separate from `src/main.ts` so it's
+unit-testable without jsdom, the same reasoning behind keeping `dimensionLine.ts`'s math
+DOM-free. `src/main.ts` instantiates one `HistoryStack<AppSnapshot>`, where an `AppSnapshot` is
+a clone of both `currentParams` and the available-space sliders' state together — undo/redo
+covers every slider in the app on one shared stack, including the available-space group, not
+just the per-ramp-type ones.
+
+Each slider's `<input>` (built by `renderSliderList`) records a history entry on its native
+`change` event (fires once per drag-release or per keyboard step), not on every `input` tick —
+so dragging a slider end to end is one undo step, not dozens. A module-level `pendingSnapshot`,
+set on the *first* `input` event of a drag and cleared on `change`, captures the pre-drag state
+for that entry; since it's a single shared variable rather than per-slider, `bindDiameterBound`'s
+synthetic clamp-cascade `input` event (see Coping above) rides along in the same pending
+snapshot/undo step as the drag that triggered it, instead of creating its own.
+
+`resetParams` (`#reset-btn`) also records an undo entry before applying `HALF_PIPE_DEFAULTS`,
+so "Reset to defaults" itself can be undone; the initial page-load render uses a separate
+`applyDefaults` (no history recording), so the undo stack starts empty. The `#undo-btn`/
+`#redo-btn` pair sits at the very top of `#panel`, disabled via `HistoryStack`'s
+`canUndo`/`canRedo` whenever their respective stack is empty.
 
 ## Available space
 

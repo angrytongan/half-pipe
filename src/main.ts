@@ -10,6 +10,7 @@ import {
   type HalfPipeParams,
 } from "./ramps/halfPipe";
 import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
+import { HistoryStack } from "./history";
 
 interface Footprint {
   length: number;
@@ -54,6 +55,7 @@ const RAMP: RampSpec = {
   joistSliders: [
     { key: "joistThicknessMm", label: "Joist thickness (mm)", min: 20, max: 70, step: 1 },
     { key: "joistDepthMm", label: "Joist depth (mm)", min: 45, max: 190, step: 1 },
+    { key: "internalCurveJoistCount", label: "Internal curve joists", min: 0, max: 30, step: 1 },
   ],
   bottomTransitionSliders: [
     { key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.25 },
@@ -101,6 +103,8 @@ const copingSlidersEl = document.getElementById("coping-sliders")!;
 const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
 const resetViewBtn = document.getElementById("reset-view-btn")!;
+const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
+const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
 const themeToggle = document.getElementById("theme-toggle")!;
 
@@ -248,6 +252,43 @@ function rebuildDimensions(params: HalfPipeParams): void {
 
 let currentParams: HalfPipeParams = { ...RAMP.defaults };
 
+interface AppSnapshot {
+  params: HalfPipeParams;
+  space: Record<string, number>;
+}
+
+const history = new HistoryStack<AppSnapshot>();
+// Set on the first `input` event of a drag (or keyboard step), recorded into `history` on
+// the matching `change` event, so a whole drag is one undo step rather than one per tick.
+let pendingSnapshot: AppSnapshot | null = null;
+
+function snapshot(): AppSnapshot {
+  return { params: { ...currentParams }, space: { ...availableSpace } };
+}
+
+function updateHistoryButtons(): void {
+  undoBtn.disabled = !history.canUndo();
+  redoBtn.disabled = !history.canRedo();
+}
+
+function applySnapshot(s: AppSnapshot): void {
+  currentParams = { ...s.params };
+  Object.assign(availableSpace, s.space);
+  renderAllSliderGroups();
+  rebuildRamp();
+  updateHistoryButtons();
+}
+
+function undo(): void {
+  const previous = history.undo(snapshot());
+  if (previous) applySnapshot(previous);
+}
+
+function redo(): void {
+  const next = history.redo(snapshot());
+  if (next) applySnapshot(next);
+}
+
 const SPACE_AXES: { key: keyof Footprint; label: string }[] = [
   { key: "length", label: "Length" },
   { key: "width", label: "Width" },
@@ -328,9 +369,16 @@ function renderSliderList(container: HTMLElement, specs: SliderSpec[], state: Re
     input.value = String(state[spec.key]);
     input.dataset.key = spec.key;
     input.addEventListener("input", () => {
+      pendingSnapshot ??= snapshot();
       state[spec.key] = Number(input.value);
       valueSpan.textContent = input.value;
       onChange();
+    });
+    input.addEventListener("change", () => {
+      if (pendingSnapshot === null) return;
+      history.record(pendingSnapshot);
+      pendingSnapshot = null;
+      updateHistoryButtons();
     });
 
     row.append(label, input);
@@ -357,6 +405,7 @@ function renderAllSliderGroups(): void {
   renderSliderList(bottomTransitionSlidersEl, RAMP.bottomTransitionSliders, state, rebuildRamp);
   renderSliderList(copingSlidersEl, RAMP.copingSliders, state, rebuildRamp);
   renderSliderList(rampSlidersEl, RAMP.rampSliders, state, rebuildRamp);
+  renderSliderList(spaceSlidersEl, AVAILABLE_SPACE_SLIDERS, availableSpace, renderSpaceStatus);
 
   const odInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingOdMm"]')!;
   const idInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingIdMm"]')!;
@@ -364,10 +413,16 @@ function renderAllSliderGroups(): void {
   bindDiameterBound(idInput, odInput, "min");
 }
 
-function resetParams(): void {
+function applyDefaults(): void {
   currentParams = { ...RAMP.defaults };
   renderAllSliderGroups();
   rebuildRamp();
+}
+
+function resetParams(): void {
+  history.record(snapshot());
+  applyDefaults();
+  updateHistoryButtons();
 }
 
 function resetView(): void {
@@ -392,11 +447,13 @@ renderThemeToggle();
 
 resetBtn.addEventListener("click", resetParams);
 resetViewBtn.addEventListener("click", resetView);
+undoBtn.addEventListener("click", undo);
+redoBtn.addEventListener("click", redo);
 dimensionsToggle.addEventListener("input", () => {
   dimensionsGroup.visible = dimensionsToggle.checked;
 });
-renderSliderList(spaceSlidersEl, AVAILABLE_SPACE_SLIDERS, availableSpace, renderSpaceStatus);
-resetParams();
+applyDefaults();
+updateHistoryButtons();
 
 function resize(): void {
   const { clientWidth, clientHeight } = viewport;

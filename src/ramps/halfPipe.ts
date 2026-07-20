@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { centerFootprint } from "./util";
-import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
+import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
-import { buildJoistBox, CURVE_JOIST_SPACING_M, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
+import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
 
 export interface HalfPipeParams {
@@ -16,6 +16,7 @@ export interface HalfPipeParams {
   internalRibCount: number;
   joistThicknessMm: number;
   joistDepthMm: number;
+  internalCurveJoistCount: number;
   internalStudCount: number;
   copingIdMm: number;
   copingOdMm: number;
@@ -34,6 +35,7 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   internalRibCount: 1,
   joistThicknessMm: JOIST_THICKNESS_MM,
   joistDepthMm: JOIST_DEPTH_MM,
+  internalCurveJoistCount: 8,
   internalStudCount: 3,
   copingIdMm: 50.8,
   copingOdMm: 60.3,
@@ -173,23 +175,51 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
 /**
  * Joist/ledger skeleton: one joist per (profile landmark point) x (build-section bay).
  * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
- * evenly-spaced interior points up the curve (≤ CURVE_JOIST_SPACING_M apart, exact at the
- * bottom end — the same trick ribZPositions uses for rib counts), and the end of the floor
- * section (deck's outer edge, the ramp's own outer edge — the rib's outline terminates exactly
- * there, with no inset, unlike the bottom-corner end). No joist at the deck/curve corner itself
- * (deck start) — tilted to the curve's own tangent there (as steep as `transitionAngleDeg`)
- * while anchored exactly where the flat deck begins, its top face would rise above the deck
- * surface on the deck side of its own centerline, physically intersecting the deck it's
- * supposed to sit under. Needs a correctly-placed joist there instead — see features.md. No
- * joist under the middle of the bottom transition — buildBottomTransitionFrame's own stud wall
- * (top plate, bottom plate, two wall studs, optional internal studs) covers that span instead.
- * Section bays reuse ribZPositions's own output: its doubled-seam ribs already pair up as
- * (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per pair, so no separate bay-finding
- * logic is needed — a joist only bridges a real section bay, never the near-zero gap inside
- * a doubled seam (those two ribs are already face-to-face and screwed together directly).
+ * `internalCurveJoistCount` interior points up the curve (the two ends, bottom corner and notch
+ * shelf, are always present regardless of the slider — this count is strictly what's added
+ * between them), spaced evenly by arc length between the bottom-most joist's own *inside edge*
+ * and the topmost joist's own *bottom edge* — not their anchor points, which would over-count
+ * half of each boundary joist's thickness at either end (see `curveStartAngle`/`curveEndAngle`
+ * below) — the coping notch's own shelf point, and the end of the floor
+ * section (deck's outer edge, the ramp's own outer edge — the
+ * rib's outline terminates exactly there, with no inset, unlike the bottom-corner end). No
+ * joist at the deck/curve corner itself (deck start) — tilted to the curve's own tangent there
+ * (as steep as `transitionAngleDeg`) while anchored exactly where the flat deck begins, its top
+ * face would rise above the deck surface on the deck side of its own centerline, physically
+ * intersecting the deck it's supposed to sit under. The topmost curve joist is anchored at
+ * `copingNotch`'s `shelfEnd`/`shelfAngle` instead (see coping.ts) — genuinely on the curve
+ * (solved exactly, not approximated) at the height where the notch's own horizontal shelf cut
+ * meets it. It's inset backward along its own tangent by half the joist thickness, the same
+ * "flush face, not centered" convention the deck-outer inset below uses, so it's the joist's
+ * *notch-side corner* — not its center — that lands exactly on shelfEnd: past that corner the
+ * rib's been cut away into the notch, so a centered joist would have nothing to sit flush
+ * against on that side. Sitting below/behind the corner, inside the notch, it can't rise above
+ * the deck the way the old corner-anchored version did. No joist under the middle of the
+ * bottom transition —
+ * buildBottomTransitionFrame's own stud wall (top plate, bottom plate, two wall studs, optional
+ * internal studs) covers that span instead. Section bays reuse ribZPositions's own output: its
+ * doubled-seam ribs already pair up as (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per
+ * pair, so no separate bay-finding logic is needed — a joist only bridges a real section bay,
+ * never the near-zero gap inside a doubled seam (those two ribs are already face-to-face and
+ * screwed together directly).
  */
 export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, internalRibCount, ribThicknessMm, joistThicknessMm, joistDepthMm } = params;
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    width,
+    internalRibCount,
+    ribThicknessMm,
+    joistThicknessMm,
+    joistDepthMm,
+    internalCurveJoistCount,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+  } = params;
   const half = bottomTransitionLength / 2;
   const jointDepth = joistDepthMm / 1000;
   const ribThickness = ribThicknessMm / 1000;
@@ -198,18 +228,47 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
 
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const deckOuter = points[points.length - 1];
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+  );
 
-  const sweep = THREE.MathUtils.degToRad(transitionAngleDeg);
-  const curveArcLength = radius * sweep;
-  const curveSegments = Math.max(1, Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M));
-  const curveInteriorPoints = transitionArcPoints(radius, transitionAngleDeg, curveSegments).slice(1, -1);
-  const curveInteriorAngles = curveInteriorPoints.map((_, i) => ((i + 1) / curveSegments) * sweep);
+  // Interior joists fill the gap between the two boundary joists' own edges, not their
+  // anchor points: the bottom-most joist's inside (uphill) edge is thickness/2 along its own
+  // (flat) tangent from its (0,0) anchor, and the topmost joist's bottom (downhill) edge is
+  // thickness/2 further back than shelfEnd (shelfLocalPoint, below, already sits thickness/2
+  // back from shelfEnd, at the joist's *center*). Converting that thickness/2 tangential
+  // offset to an angle via arc length (Δt = distance / radius) is exact for a circular arc.
+  const edgeAngle = thickness / 2 / radius;
+  const curveStartAngle = edgeAngle;
+  const curveEndAngle = notch.shelfAngle - edgeAngle;
+  const curveSegments = internalCurveJoistCount + 1;
+  const curveInteriorAngles = Array.from(
+    { length: internalCurveJoistCount },
+    (_, i) => curveStartAngle + ((curveEndAngle - curveStartAngle) * (i + 1)) / curveSegments,
+  );
+  const curveInteriorPoints: [number, number][] = curveInteriorAngles.map((t) => [radius * Math.sin(t), radius * (1 - Math.cos(t))]);
+
+  // The shelf-point landmark is inset backward (downhill) along its own tangent by half the
+  // joist's thickness, the same "flush face, not centered" convention the deck-outer inset
+  // below uses — so its *notch-side* top corner, not its center, lands exactly on shelfEnd:
+  // the point where the curve and the notch's own horizontal shelf cut meet. Past that corner
+  // there's no rib material left for a centered joist to sit flush against — it's been cut
+  // away into the notch.
+  const shelfLocalPoint: [number, number] = [
+    notch.shelfEnd[0] - (thickness / 2) * Math.cos(notch.shelfAngle),
+    notch.shelfEnd[1] - (thickness / 2) * Math.sin(notch.shelfAngle),
+  ];
 
   // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
-  // rising through the curve, flat again on the deck floor (0) — see transitionAndDeckPoints
-  // for why deckOuter's own point differs from the curve's own endpoint (deck start, omitted).
-  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, deckOuter];
-  const localAngles: number[] = [0, ...curveInteriorAngles, 0];
+  // rising through the curve, tilted again at the notch's shelf point, flat on the deck floor
+  // (0) — see transitionAndDeckPoints for why deckOuter's own point differs from the curve's
+  // own endpoint (deck start, omitted).
+  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter];
+  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0];
   // The deck-outer landmark is the ramp's own outer edge, where the rib's outline ends flush
   // (no inset) — so that one joist alone is inset inward by half its own thickness, aligning
   // its external face with the rib's edge instead of centering the joist on it and sticking

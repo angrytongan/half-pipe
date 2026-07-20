@@ -46,6 +46,13 @@ describe("copingNotch", () => {
     expect(y).toBeCloseTo(notch.wallBottom[1], 10); // shelf is horizontal
   });
 
+  it("returns shelfAngle as shelfEnd's own arc parameter (its tangent angle too)", () => {
+    const notch = copingNotch(points, radius, pipeRadius, h, v);
+    const [x, y] = notch.shelfEnd;
+    expect(radius * Math.sin(notch.shelfAngle)).toBeCloseTo(x, 10);
+    expect(radius * (1 - Math.cos(notch.shelfAngle))).toBeCloseTo(y, 10);
+  });
+
   it("drops arc points above shelf height from arcCutoffIndex onward", () => {
     const notch = copingNotch(points, radius, pipeRadius, h, v);
     for (let i = 0; i <= notch.arcCutoffIndex; i++) {
