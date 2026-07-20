@@ -230,9 +230,54 @@ already does for the rib group and coping, called after every param change.
 
 ## Scene
 
-`src/main.ts`: `PerspectiveCamera` + `OrbitControls` (no damping), ambient +
-raking directional light with shadows, a flat ground plane, flat-shaded
-solid-color ramp material (schematic style, no textures).
+`src/main.ts`: `PerspectiveCamera` + `OrbitControls` (no damping),
+navigation mapped to feel like SketchUp rather than OrbitControls' own
+default: `zoomToCursor: true` so scroll-zoom centers on the pointer;
+`mouseButtons` maps both `LEFT` and `MIDDLE` to `THREE.MOUSE.ROTATE`
+(`RIGHT: null`, free for future tools like selection) — middle-drag
+matches SketchUp directly, left-drag orbits too since most trackpads
+have no easy middle-click; shift+either pans, via OrbitControls' own
+built-in modifier handling for a ROTATE-mapped button, no extra code
+needed (`enableRotate` staying `false` doesn't block this — the pan
+branch of that modifier check doesn't look at it, only the rotate
+branch does).
+
+Rotation itself (SketchUp-style: pivot around whatever's under the
+cursor, not a fixed point) is **not** built on `controls.target` —
+`controls.enableRotate = false` leaves plain left/middle drags entirely
+unclaimed by OrbitControls, and a hand-rolled `pointerdown`/
+`pointermove` pair of listeners drives it instead, as a true rigid
+rotation rather than "recompute spherical coords relative to the pivot,
+then `camera.lookAt(pivot)`" (an earlier version worked that way and
+still snapped — `lookAt` forces the camera to face the pivot *exactly*
+for any angle including ~0, so the first `pointermove` of a *new* drag,
+whose pivot is generally different from wherever the camera was
+previously facing, jumps regardless of how small the actual mouse
+movement is — confirmed numerically, a 1px drag produced a jump of
+~10% of screen height). The fix: each drag step rotates
+`camera.position` *and* `camera.quaternion` by the same small quaternion
+around the fixed pivot (`rotateCameraAroundPivot`) — azimuth around
+world-up (never introduces roll), then elevation around the
+camera's own, freshly-recomputed local right axis — which is the
+identity at zero rotation and stays continuous as the pivot changes
+between drags, since it never forces a fresh "face this exact point"
+reorientation. `controls.target` is then re-derived from the camera's
+resulting facing direction (`camera.position + forward * distance`, distance
+preserved from before the rotation) rather than set to the pivot, so
+OrbitControls' own `update()` — which unconditionally calls
+`camera.lookAt(target)` every frame regardless of dragging — finds
+target already exactly where the camera is looking and doesn't undo any
+of this on the next render. The pivot itself is picked via
+`THREE.Raycaster` once on `pointerdown` (against the ground and the
+ramp/joist/bottom-transition/coping groups, first hit wins, or falls
+back to the existing `controls.target` on a miss), silently — no camera
+change until real drag movement accumulates, verified numerically down
+to an exactly-zero screen-projection change at zero rotation and a
+proportionally tiny (not snapped) change even across many consecutive
+new-pivot drags. Pan (shift+drag) and zoom (scroll, `zoomToCursor`)
+stay on OrbitControls, unaffected. Ambient + raking directional light
+with shadows, a flat ground plane, flat-shaded solid-color ramp
+material (schematic style, no textures).
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
