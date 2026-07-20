@@ -2,26 +2,6 @@
 
 Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for the scope/design reasoning behind an item before starting it. When an item is built, remove it from here and describe it in [status.md](status.md) instead.
 
-## Interface
-
-- [ ] Add an information icon next to the application name in the header, that
-      when clicked opens up a modal explaining what this application is.
-- [ ] Include two human billboards, one adult height, one child height. This
-      help provide the user with an idea of scale. Position them off the ramp
-      halfway along the length of the bottom transition.
-
-### Controls 
-
-Do this section in order:
-
-- [ ] Move the camera closer to the ramp on page load.
-- [ ] Move control "Width" from "Ramp transition" to "Ramp parameters".
-
-## Available space
-
-- [ ] Change the terrain size to the available space dimensions length and
-      width to give the user feedback as to how large the ramp is.
-
 ## Construction / BOM
 
 - [ ] Construction methods (plywood/OSB skin over a framed rib structure —
