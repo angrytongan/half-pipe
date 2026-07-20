@@ -284,7 +284,23 @@ style, no textures).
 A "Reset view" button (`#reset-view-btn`, top of `#panel`) re-applies the initial
 `camera.position`/`controls.target` values, independent of "Reset to defaults" (which only
 touches ramp parameters, never the camera) — orbiting can leave the camera anywhere, and this is
-the one control that always brings it back.
+the one control that always brings it back. Both page load and "Reset view" read from the same
+`DEFAULT_CAMERA_POSITION`/`DEFAULT_CAMERA_TARGET` module constants (`src/main.ts`) — kept as a
+single source of truth after the two had drifted apart once already.
+
+**Scale figures**: two camera-facing silhouette sprites (adult 1.7m, child 1.1m —
+`createFigureSprite`, `src/main.ts`, the same canvas-texture billboard technique as
+`createLabelSprite`, but a filled head+body shape on a transparent canvas rather than text on
+an opaque one). Positioned by `repositionFigures` just outside the ramp's deck/vert-wall edge —
+its tallest point — so their height reads directly against it; recomputed on every `rebuildRamp`
+call so they track ramp resizes. The default camera position/target above are chosen so the
+figures fall inside the initial view. A "Show scale" checkbox (`#scale-toggle`, under "Show
+dimensions") toggles both sprites' `.visible`. Its ⓘ icon (a `tabindex="0"` span, deliberately
+*not* a `<button>` and deliberately *outside* the `<label for="scale-toggle">` — nesting either
+inside the label re-triggers the checkbox on click) shows a tooltip with each figure's height on
+hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positionScaleTooltip`)
+from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
+`position: absolute` descendants that overflow it.
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
@@ -292,8 +308,10 @@ per transition/deck lip (steel-pipe gray, metalness/roughness material), one per
 half-pipe has two. Center comes from `halfPipeCopingCenters`, not the geometry's bounding box —
 see decisions.md for why.
 
-`index.html` layout: an `.app-header` (skateboard icon, title, "in
-development" pill, GitHub link) matching `obstacle`'s header, above an
+`index.html` layout: an `.app-header` (skateboard icon, title, an ⓘ "about" button next to the
+title that opens a native `<dialog id="about-modal">` describing the app — `.showModal()`,
+closed via its own button, a backdrop click, or the native Esc handling `<dialog>` provides for
+free — "in development" pill, GitHub link) matching `obstacle`'s header, above an
 `.app` flex row holding the `#panel` (the undo/redo buttons, then the
 reset-view button and "Show dimensions" toggle, at the top, then an accordion of six
 independently-collapsible sections — Available space, Ramp parameters,
@@ -308,8 +326,8 @@ state. `.overlay-card` carries `class="card overlay-card"` and adds no
 background of its own — it inherits `.card`'s, so it's always exactly the
 same color as `#panel`, opaque enough to stay legible over whatever's
 rendered behind it in the canvas. No type-select (half-pipe is the only
-ramp type — see decisions.md) or method-select/BOM/tooltip UI this round —
-see features.md.
+ramp type — see decisions.md) or method-select/BOM UI this round — see
+features.md.
 
 **Dark/light mode**: a `#theme-toggle` button in the header (next to the GitHub link, 🌙/☀️
 glyph swapped by `renderThemeToggle` in `src/main.ts`) flips `document.documentElement.dataset.theme`
@@ -373,6 +391,12 @@ previously `renderSliders`).
 edge ribs are inset (see Ribs above) so the whole assembled structure
 fits exactly within `width`, with no overhang, so the raw param alone
 already matches what's actually rendered.
+
+The ground plane itself (see Scene below) is sized to match the available-space sliders
+exactly (`PlaneGeometry(availableSpace.length, availableSpace.width)`), rebuilt inside
+`renderSpaceStatus` — the one function every path that touches `availableSpace` (space
+sliders, undo/redo, initial load) already calls — so the grass rectangle visually shows the
+space constraint the status pills describe numerically.
 
 ## Deployment
 
