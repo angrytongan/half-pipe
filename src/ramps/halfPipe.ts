@@ -1,0 +1,294 @@
+import * as THREE from "three";
+import { centerFootprint } from "./util";
+import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
+import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
+import { buildJoistBox, CURVE_JOIST_SPACING_M, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
+import { copingNotch } from "./coping";
+
+export interface HalfPipeParams {
+  radius: number;
+  transitionAngleDeg: number;
+  vertHeight: number;
+  deckLength: number;
+  bottomTransitionLength: number;
+  width: number;
+  ribThicknessMm: number;
+  internalRibCount: number;
+  joistThicknessMm: number;
+  joistDepthMm: number;
+  internalStudCount: number;
+  copingIdMm: number;
+  copingOdMm: number;
+  copingHorizontalProtrusionMm: number;
+  copingVerticalProtrusionMm: number;
+}
+
+export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
+  radius: 1.8,
+  transitionAngleDeg: 57,
+  vertHeight: 0,
+  deckLength: 0.3,
+  bottomTransitionLength: 2.25,
+  width: 3,
+  ribThicknessMm: RIB_THICKNESS_MM,
+  internalRibCount: 1,
+  joistThicknessMm: JOIST_THICKNESS_MM,
+  joistDepthMm: JOIST_DEPTH_MM,
+  internalStudCount: 3,
+  copingIdMm: 50.8,
+  copingOdMm: 60.3,
+  copingHorizontalProtrusionMm: 3.2,
+  copingVerticalProtrusionMm: 6.4,
+};
+
+/**
+ * Two mirrored open profiles (left, right) — the curve/vert/deck portion of a rib — shared by
+ * the solid wedge and each individual rib. Each sits on top of the bottom transition's own
+ * framing (shifted up by the joist's major dimension, joistDepthMm — that's the height the
+ * bottom transition is built to), and each ends at its own base: a rib stops at the *inside*
+ * face of the bottommost curve joist (see buildHalfPipeJoists), not at that joist's centerline
+ * (the curve's own tangent point) — otherwise the inner half of that joist's thickness would
+ * have no rib sitting on it. It still doesn't bridge across to the other side — that gap is
+ * buildBottomTransitionSlab's job, not the ribs'. The deck-side closing edge still drops to
+ * true y=0 (see decisions.md: it's a rendering convenience, not a structural wall, so it's
+ * unaffected by the framing above it). The deck/curve corner itself is cut back into the
+ * coping notch (see coping.ts) instead of meeting at a sharp point.
+ */
+function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    joistDepthMm,
+    joistThicknessMm,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+  } = params;
+  const jointDepth = joistDepthMm / 1000;
+  const half = bottomTransitionLength / 2;
+  const joistThickness = joistThicknessMm / 1000;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+  );
+
+  const mapWith = (mirrorX: (x: number) => number) => ([x, y]: [number, number]): [number, number] => [mirrorX(x), y + jointDepth];
+  const left = points.map(mapWith((x) => -half - x));
+  const right = points.map(mapWith((x) => half + x));
+
+  const side = (profile: [number, number][], baseExtension: number, mirrorX: (x: number) => number): THREE.Shape => {
+    const [tangentX, tangentY] = profile[0]; // bottom corner — the bottommost curve joist's centerline
+    const baseX = tangentX + baseExtension; // that joist's inside face
+    const outerX = profile[profile.length - 1][0]; // deck's outer edge
+    const map = mapWith(mirrorX);
+    const shape = new THREE.Shape();
+    shape.moveTo(outerX, 0);
+    shape.lineTo(...profile[profile.length - 1]); // deck's outer edge
+    shape.lineTo(...map(notch.wallTop)); // deck runs to the notch wall, not all the way to the original corner
+    shape.lineTo(...map(notch.wallBottom));
+    shape.lineTo(...map(notch.shelfEnd));
+    for (let i = notch.arcCutoffIndex; i >= 0; i--) shape.lineTo(...profile[i]);
+    shape.lineTo(baseX, tangentY);
+    shape.lineTo(baseX, 0);
+    shape.closePath();
+    return shape;
+  };
+
+  return [side(left, joistThickness / 2, (x) => -half - x), side(right, -joistThickness / 2, (x) => half + x)];
+}
+
+/**
+ * Two mirrored transitions joined by a bottom transition, decks on both outer
+ * edges — extruded across width. Closed outline, solid-wedge convention.
+ * Centered on X/Z, base at Y=0. Geometry-only utility —
+ * `buildHalfPipeRibs` below is what's actually rendered (see decisions.md).
+ */
+export function buildHalfPipeGeometry(params: HalfPipeParams): THREE.BufferGeometry {
+  const geometry = new THREE.ExtrudeGeometry(halfPipeOutline(params), { depth: params.width, bevelEnabled: false });
+  return centerFootprint(geometry);
+}
+
+/**
+ * The rib/transom skeleton: one thin extrusion of the same cross-section per rib, evenly
+ * spaced across width (see ribs.ts) instead of one full-width solid wedge.
+ */
+export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const shape = halfPipeOutline(params);
+  const ribThickness = params.ribThicknessMm / 1000;
+  return extrudeRibs(shape, ribZPositions(params.width, params.internalRibCount, ribThickness), ribThickness);
+}
+
+/**
+ * The bottom transition's own framing: a stud wall lying on the ground — not a rib, a
+ * separate structural piece screwed to the curved transition sections (see research/design.md's
+ * "Half-pipe as a special case of quarter-pipe": the bottom transition's framing is the one
+ * piece a quarter-pipe alone doesn't have). Two plates run almost the full bottomTransitionLength
+ * — inset by half the last curve joist's own thickness on each end (see buildHalfPipeJoists) so
+ * they butt up against that joist's inner face instead of reaching into its midpoint — and are
+ * positioned so their *outer* faces exactly meet the outside faces of the edge ribs, at
+ * `±width/2` (see ribZPositions: edge ribs are inset so the whole structure fits within width,
+ * with no overhang) — that's the wall's "height", lying flat instead of standing up.
+ * `internalStudCount + 2` studs (two mandatory
+ * end studs, same convention as internalRibCount) then span between the plates' *inside* faces,
+ * evenly spaced along the (now shorter) plate length, inset so their outer faces sit flush with
+ * the plate ends. Cross-section for both plates and studs reuses joistThicknessMm/joistDepthMm —
+ * the same lumber dimensions as everywhere else in this model — so joistDepthMm alone still
+ * determines the wall's thickness off the ground, unchanged from before this was split into
+ * members.
+ */
+export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { bottomTransitionLength, joistDepthMm, joistThicknessMm, width, internalStudCount } = params;
+  const jointDepth = joistDepthMm / 1000;
+  const thickness = joistThicknessMm / 1000;
+  const outsideZ = width / 2; // the outside face of each edge rib
+
+  const member = (spanZ: boolean, span: number, x: number, z: number): THREE.BufferGeometry => {
+    const geometry = spanZ ? new THREE.BoxGeometry(thickness, jointDepth, span) : new THREE.BoxGeometry(span, jointDepth, thickness);
+    geometry.translate(x, jointDepth / 2, z);
+    return geometry;
+  };
+
+  // Inset by the last curve joist's own thickness so the plates butt up against it, not into it.
+  const plateLength = bottomTransitionLength - thickness;
+  const plates = [-1, 1].map((side) => member(false, plateLength, 0, side * (outsideZ - thickness / 2)));
+
+  const insideZ = outsideZ - thickness; // the plates' inside faces
+  const studCount = internalStudCount + 2;
+  const studSpan = plateLength - thickness; // inset so the end studs' outer faces meet the (now shorter) plate ends
+  const studs = Array.from({ length: studCount }, (_, i) => {
+    const x = -studSpan / 2 + (studSpan * i) / (studCount - 1);
+    return member(true, insideZ * 2, x, 0);
+  });
+
+  return [...plates, ...studs];
+}
+
+/**
+ * Joist/ledger skeleton: one joist per (profile landmark point) x (build-section bay).
+ * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
+ * evenly-spaced interior points up the curve (≤ CURVE_JOIST_SPACING_M apart, exact at the
+ * bottom end — the same trick ribZPositions uses for rib counts), and the end of the floor
+ * section (deck's outer edge, the ramp's own outer edge — the rib's outline terminates exactly
+ * there, with no inset, unlike the bottom-corner end). No joist at the deck/curve corner itself
+ * (deck start) — tilted to the curve's own tangent there (as steep as `transitionAngleDeg`)
+ * while anchored exactly where the flat deck begins, its top face would rise above the deck
+ * surface on the deck side of its own centerline, physically intersecting the deck it's
+ * supposed to sit under. Needs a correctly-placed joist there instead — see features.md. No
+ * joist under the middle of the bottom transition — buildBottomTransitionFrame's own stud wall
+ * (top plate, bottom plate, two wall studs, optional internal studs) covers that span instead.
+ * Section bays reuse ribZPositions's own output: its doubled-seam ribs already pair up as
+ * (ribZs[0],ribZs[1]), (ribZs[2],ribZs[3]), ... one bay per pair, so no separate bay-finding
+ * logic is needed — a joist only bridges a real section bay, never the near-zero gap inside
+ * a doubled seam (those two ribs are already face-to-face and screwed together directly).
+ */
+export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, internalRibCount, ribThicknessMm, joistThicknessMm, joistDepthMm } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000;
+  const ribThickness = ribThicknessMm / 1000;
+  const thickness = joistThicknessMm / 1000;
+  const depth = joistDepthMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const deckOuter = points[points.length - 1];
+
+  const sweep = THREE.MathUtils.degToRad(transitionAngleDeg);
+  const curveArcLength = radius * sweep;
+  const curveSegments = Math.max(1, Math.ceil(curveArcLength / CURVE_JOIST_SPACING_M));
+  const curveInteriorPoints = transitionArcPoints(radius, transitionAngleDeg, curveSegments).slice(1, -1);
+  const curveInteriorAngles = curveInteriorPoints.map((_, i) => ((i + 1) / curveSegments) * sweep);
+
+  // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
+  // rising through the curve, flat again on the deck floor (0) — see transitionAndDeckPoints
+  // for why deckOuter's own point differs from the curve's own endpoint (deck start, omitted).
+  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, deckOuter];
+  const localAngles: number[] = [0, ...curveInteriorAngles, 0];
+  // The deck-outer landmark is the ramp's own outer edge, where the rib's outline ends flush
+  // (no inset) — so that one joist alone is inset inward by half its own thickness, aligning
+  // its external face with the rib's edge instead of centering the joist on it and sticking
+  // half its thickness out past where the rib actually ends.
+  const inwardInset = localPoints.map((_, i) => (i === localPoints.length - 1 ? thickness / 2 : 0));
+  const worldJoists: { x: number; y: number; angle: number }[] = [
+    ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
+    ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),
+  ];
+
+  const ribZs = ribZPositions(width, internalRibCount, ribThickness);
+  const joists: THREE.BufferGeometry[] = [];
+  for (let i = 0; i < ribZs.length; i += 2) {
+    // ribZs are rib centerlines — the joist is built to butt against each rib's inside face,
+    // not its centerline, so it spans the actual bay, not the centerline-to-centerline gap.
+    const zStart = ribZs[i] + ribThickness / 2;
+    const zEnd = ribZs[i + 1] - ribThickness / 2;
+    for (const { x, y, angle } of worldJoists) {
+      joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth, angle));
+    }
+  }
+  return joists;
+}
+
+/**
+ * Coping pipe centers (in the returned geometry's centered coordinate space), both sides —
+ * the lip where each transition meets its deck, i.e. the curve side, not the decks'
+ * outer/back edges. Positioned by the same notch math that cuts the rib (see coping.ts), not
+ * just the deck/curve corner itself, since the pipe sits recessed into that notch rather than
+ * resting exactly on the corner. The outline is symmetric about local x=0 by construction
+ * (left/right are mirrored), so centering is a no-op here.
+ */
+export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: number }[] {
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    joistDepthMm,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+  } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+  );
+  const [cx, cy] = notch.pipeCenter;
+  const y = cy + jointDepth;
+  return [
+    { x: -(half + cx), y },
+    { x: half + cx, y },
+  ];
+}
+
+/**
+ * Footprint this ramp actually needs — length (X), width (Z), height (Y) —
+ * computed analytically from the same transitionAndDeckPoints used to build
+ * the geometry, so it can't drift from what's actually rendered. Cheap
+ * enough to call on every param change for space-constraint validation
+ * without building a BufferGeometry just to measure it. Width is the raw
+ * width param directly — the edge ribs are inset (see ribZPositions) so
+ * the whole assembled structure fits exactly within width, with no
+ * overhang past it.
+ */
+export function halfPipeFootprint(params: HalfPipeParams): { length: number; width: number; height: number } {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, joistDepthMm } = params;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const [deckOuterX, deckOuterY] = points[points.length - 1];
+  return {
+    length: bottomTransitionLength + 2 * deckOuterX,
+    width,
+    height: deckOuterY + joistDepthMm / 1000,
+  };
+}

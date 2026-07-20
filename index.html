@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>half-pipe</title>
+    <script>
+      (function () {
+        var stored = localStorage.getItem("theme");
+        var theme = stored || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        font-family: system-ui, sans-serif;
+        --bg: #ffffff;
+        --text: #1a1a1a;
+        --border: #8884;
+        --card-bg: #f5f5f5;
+        --shadow: 0 1px 4px #0003;
+        --pill-bg: #cf222e1a;
+        --pill-color: #cf222e;
+        --pill-border: #cf222e55;
+        --safe-bg: #1a7f371a;
+        --safe-color: #1a7f37;
+        --unsafe-bg: #cf222e1a;
+        --unsafe-color: #cf222e;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+      }
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #1a1a1a;
+        --text: #e8e8e8;
+        --border: #ffffff26;
+        --card-bg: #262626;
+        --shadow: 0 1px 4px #0006;
+      }
+      body {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .app-header {
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.6rem 1rem;
+        border-bottom: 1px solid var(--border);
+      }
+      .app-header .icon-skate {
+        font-size: 1.3rem;
+        line-height: 1;
+      }
+      .app-header .app-title {
+        font-weight: 700;
+        font-size: 1rem;
+      }
+      .app-header .spacer {
+        flex: 1;
+      }
+      .app-header .pill {
+        background: var(--pill-bg);
+        color: var(--pill-color);
+        border: 1px solid var(--pill-border);
+        border-radius: 999px;
+        padding: 0.15rem 0.6rem;
+        font-size: 0.75rem;
+        white-space: nowrap;
+      }
+      .app-header .icon-link {
+        display: flex;
+        color: inherit;
+        opacity: 0.75;
+      }
+      .app-header .icon-link:hover {
+        opacity: 1;
+      }
+      #theme-toggle {
+        background: none;
+        border: none;
+        padding: 0;
+        font-size: 1.1rem;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .app {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        gap: 1rem;
+        padding: 1rem;
+        box-sizing: border-box;
+      }
+      .card {
+        border-radius: 10px;
+        border: 1px solid var(--border);
+        background: var(--card-bg);
+        box-shadow: var(--shadow);
+      }
+      #panel {
+        width: 260px;
+        flex-shrink: 0;
+        padding: 1rem;
+        box-sizing: border-box;
+        overflow-y: auto;
+      }
+      .toggle-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 0.9rem;
+        cursor: pointer;
+      }
+      .slider-row {
+        margin-bottom: 0.9rem;
+      }
+      .slider-row label {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        margin-bottom: 0.25rem;
+      }
+      .slider-row input[type="range"] {
+        width: 100%;
+      }
+      #reset-btn,
+      #reset-view-btn {
+        width: 100%;
+        padding: 0.4rem;
+        margin-bottom: 1rem;
+        cursor: pointer;
+      }
+      #panel details {
+        padding: 0.75rem 0;
+        border-bottom: 1px solid var(--border);
+      }
+      #panel details:last-of-type {
+        border-bottom: none;
+      }
+      #panel summary {
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      #panel details[open] summary {
+        margin-bottom: 0.75rem;
+      }
+      #space-status {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        max-width: 12rem;
+      }
+      .space-status {
+        padding: 0.15rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-variant-numeric: tabular-nums;
+      }
+      .space-status.safe {
+        background: var(--safe-bg);
+        color: var(--safe-color);
+      }
+      .space-status.unsafe {
+        background: var(--unsafe-bg);
+        color: var(--unsafe-color);
+      }
+      #viewport {
+        flex: 1;
+        min-width: 0;
+        position: relative;
+        overflow: hidden; /* clips the canvas's square corners to the card's rounded ones */
+      }
+      #viewport canvas {
+        display: block;
+      }
+      .overlay-card {
+        position: absolute;
+        top: 1rem;
+        left: 1rem;
+        padding: 0.6rem 0.8rem;
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="app-header">
+      <span class="icon-skate" role="img" aria-label="Person skateboarding">🛹</span>
+      <span class="app-title">half-pipe</span>
+      <div class="spacer"></div>
+      <span class="pill">in development</span>
+      <button type="button" id="theme-toggle" class="icon-link" aria-label="Toggle dark mode"></button>
+      <a
+        class="icon-link"
+        href="https://github.com/angrytongan/half-pipe"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="GitHub repository"
+      >
+        <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true">
+          <path
+            fill-rule="evenodd"
+            clip-rule="evenodd"
+            d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+          />
+        </svg>
+      </a>
+    </header>
+    <div class="app">
+      <div id="panel" class="card">
+        <button type="button" id="reset-view-btn">Reset view</button>
+        <label class="toggle-row">Show dimensions<input type="checkbox" id="dimensions-toggle" checked /></label>
+        <details open>
+          <summary>Available space</summary>
+          <div id="space-sliders"></div>
+        </details>
+        <details>
+          <summary>Ramp parameters</summary>
+          <div id="ramp-sliders"></div>
+        </details>
+        <details>
+          <summary>Ribs</summary>
+          <div id="rib-sliders"></div>
+        </details>
+        <details>
+          <summary>Joists</summary>
+          <div id="joist-sliders"></div>
+        </details>
+        <details>
+          <summary>Bottom transition</summary>
+          <div id="bottom-transition-sliders"></div>
+        </details>
+        <details>
+          <summary>Coping</summary>
+          <div id="coping-sliders"></div>
+        </details>
+        <button type="button" id="reset-btn">Reset to defaults</button>
+      </div>
+      <div id="viewport" class="card">
+        <div id="space-status" class="card overlay-card"></div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
