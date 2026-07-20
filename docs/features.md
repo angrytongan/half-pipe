@@ -16,6 +16,9 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       `obstacle`'s dimension code has this either, and `buildLinearDimension`
       only handles straight measurements.
 
+- [ ] We need a dimension line showing the distance between the midpoint of two
+      joists in a straight line.
+
 ## Joists
 
 - [ ] A joist needs to be present between two ribs at the bottom rear corner of each rib

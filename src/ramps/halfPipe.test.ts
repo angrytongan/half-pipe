@@ -10,7 +10,7 @@ import {
   HALF_PIPE_DEFAULTS,
 } from "./halfPipe";
 import { ribZPositions } from "./ribs";
-import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
+import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
 
 describe("buildHalfPipeGeometry", () => {
@@ -305,13 +305,23 @@ describe("buildHalfPipeJoists", () => {
     const thickness = params.joistThicknessMm / 1000;
     const depth = params.joistDepthMm / 1000;
     const jointDepth = params.joistDepthMm / 1000;
-    const sweep = (params.transitionAngleDeg * Math.PI) / 180;
 
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const edgeAngle = thickness / 2 / params.radius;
+    const curveStartAngle = edgeAngle;
+    const curveEndAngle = notch.shelfAngle - edgeAngle;
     const curveSegments = params.internalCurveJoistCount + 1;
-    const curveInteriorPoints = transitionArcPoints(params.radius, params.transitionAngleDeg, curveSegments).slice(1, -1);
-    const lastInteriorIndex = curveInteriorPoints.length - 1;
-    const [localX, localY] = curveInteriorPoints[lastInteriorIndex];
-    const angle = ((lastInteriorIndex + 1) / curveSegments) * sweep;
+    const lastInteriorIndex = params.internalCurveJoistCount - 1;
+    const angle = curveStartAngle + ((curveEndAngle - curveStartAngle) * (lastInteriorIndex + 1)) / curveSegments;
+    const localX = params.radius * Math.sin(angle);
+    const localY = params.radius * (1 - Math.cos(angle));
 
     const expectedX = thickness * Math.abs(Math.cos(angle)) + depth * Math.abs(Math.sin(angle));
     const expectedY = thickness * Math.abs(Math.sin(angle)) + depth * Math.abs(Math.cos(angle));
@@ -336,6 +346,56 @@ describe("buildHalfPipeJoists", () => {
     const box = curveJoist!.boundingBox!;
     expect(box.max.x - box.min.x).toBeCloseTo(expectedX, 5);
     expect(box.max.y - box.min.y).toBeCloseTo(expectedY, 5);
+  });
+
+  it("spaces curve joists evenly by arc length between the bottom-most joist's inside edge and the topmost joist's bottom edge", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 5 };
+    const thickness = params.joistThicknessMm / 1000;
+    const depth = params.joistDepthMm / 1000;
+    const jointDepth = params.joistDepthMm / 1000;
+    const half = params.bottomTransitionLength / 2;
+
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const edgeAngle = thickness / 2 / params.radius;
+    const curveStartAngle = edgeAngle; // bottom-most joist's inside edge
+    const curveEndAngle = notch.shelfAngle - edgeAngle; // topmost joist's bottom edge
+    const curveSegments = params.internalCurveJoistCount + 1;
+
+    // Every gap — start edge to first joist, joist to joist, last joist to end edge — must be
+    // identical: (curveEndAngle - curveStartAngle) split into curveSegments equal pieces.
+    const expectedGap = (curveEndAngle - curveStartAngle) / curveSegments;
+    const angles = Array.from({ length: params.internalCurveJoistCount }, (_, i) => curveStartAngle + expectedGap * (i + 1));
+    const gaps = [angles[0] - curveStartAngle, ...angles.slice(1).map((a, i) => a - angles[i]), curveEndAngle - angles[angles.length - 1]];
+    for (const gap of gaps) expect(gap).toBeCloseTo(expectedGap, 10);
+
+    const joists = buildHalfPipeJoists(params);
+    for (const angle of angles) {
+      const localX = params.radius * Math.sin(angle);
+      const localY = params.radius * (1 - Math.cos(angle));
+      for (const mirror of [1, -1]) {
+        const worldX = mirror * (half + localX);
+        const worldY = localY + jointDepth;
+        const jointAngle = mirror * angle;
+        const expectedCenterX = worldX + Math.sin(jointAngle) * (depth / 2);
+        const expectedCenterY = worldY - Math.cos(jointAngle) * (depth / 2);
+
+        const found = joists.some((joist) => {
+          joist.computeBoundingBox();
+          const box = joist.boundingBox!;
+          const x = (box.min.x + box.max.x) / 2;
+          const y = (box.min.y + box.max.y) / 2;
+          return Math.abs(x - expectedCenterX) < 1e-6 && Math.abs(y - expectedCenterY) < 1e-6;
+        });
+        expect(found).toBe(true);
+      }
+    }
   });
 
   it("anchors the topmost curve joist at the coping notch's own shelf point, tilted to match", () => {

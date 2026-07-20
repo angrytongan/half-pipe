@@ -115,38 +115,46 @@ length vertical" means the deeper dimension
 section bay) pair:
 
 - **Landmarks per side**: the bottom corner (curve tangent, where it meets
-  the bottom transition), `internalCurveJoistCount` evenly-spaced interior
-  points up the curve (`transitionArcPoints` with `segments =
-  internalCurveJoistCount + 1`, so the count lands exactly on the bottom
-  end, the same trick `ribZPositions` uses for rib counts — this slider
-  (default 8, "Internal curve joists" in the "Joists" section) controls
-  only what's added *between* the bottom-corner and notch-shelf joists;
-  those two are always present regardless of its value), the coping
-  notch's own shelf point, and the end of the floor section (the deck's
-  outer edge, the ramp's own outer edge — the rib's outline terminates
-  exactly there, with no inset, unlike the bottom-corner end, so that one
-  joist alone is inset inward by half its own thickness, aligning its
-  external face with the rib's edge instead of centering the joist there
-  and sticking half its thickness out past where the rib actually ends).
-  No joist at the deck/curve corner itself (deck start) — tilted to the
-  curve's own tangent there while anchored exactly where the flat deck
-  begins, its top face would rise above the deck surface, physically
-  intersecting it. The topmost curve joist is anchored at
-  `copingNotch`'s `shelfEnd`/`shelfAngle` instead (`src/ramps/coping.ts`)
-  — a point solved exactly to sit on the curve itself, at the height
-  where the notch's own horizontal shelf cut meets it. `shelfAngle` is
-  the arc parameter at that point, which (like every other curve-interior
-  landmark here) doubles as its own tangent angle. Like the deck-outer
-  landmark above, this one is inset — backward along its own tangent, by
-  half the joist thickness, the same "flush face, not centered"
-  convention — so it's the joist's *notch-side* corner, not its center,
-  that lands exactly on `shelfEnd`: past that corner the rib's already
-  cut away into the notch, so a centered joist would have nothing to sit
-  flush against on that side. Sitting below/behind the corner, inside the
-  notch, it can't rise above the deck the way the corner-anchored version
-  did. No joist under the middle of the bottom transition —
-  `buildBottomTransitionFrame`'s own stud wall (top plate, bottom plate,
-  two wall studs, optional internal studs) covers that span instead.
+  the bottom transition), `internalCurveJoistCount` interior points up the
+  curve (default 8, "Internal curve joists" slider in the "Joists"
+  section — controls only what's added *between* the bottom-corner and
+  notch-shelf joists; those two are always present regardless of its
+  value), the coping notch's own shelf point, and the end of the floor
+  section (the deck's outer edge, the ramp's own outer edge — the rib's
+  outline terminates exactly there, with no inset, unlike the
+  bottom-corner end, so that one joist alone is inset inward by half its
+  own thickness, aligning its external face with the rib's edge instead
+  of centering the joist there and sticking half its thickness out past
+  where the rib actually ends). No joist at the deck/curve corner itself
+  (deck start) — tilted to the curve's own tangent there while anchored
+  exactly where the flat deck begins, its top face would rise above the
+  deck surface, physically intersecting it. The topmost curve joist is
+  anchored at `copingNotch`'s `shelfEnd`/`shelfAngle` instead
+  (`src/ramps/coping.ts`) — a point solved exactly to sit on the curve
+  itself, at the height where the notch's own horizontal shelf cut meets
+  it. `shelfAngle` is the arc parameter at that point, which (like every
+  other curve-interior landmark here) doubles as its own tangent angle.
+  Like the deck-outer landmark above, this one is inset — backward along
+  its own tangent, by half the joist thickness, the same "flush face, not
+  centered" convention — so it's the joist's *notch-side* corner, not its
+  center, that lands exactly on `shelfEnd`: past that corner the rib's
+  already cut away into the notch, so a centered joist would have nothing
+  to sit flush against on that side. Sitting below/behind the corner,
+  inside the notch, it can't rise above the deck the way the
+  corner-anchored version did. The `internalCurveJoistCount` interior
+  points are spaced *evenly by arc length between the two boundary
+  joists' own edges* — the bottom-most joist's inside (uphill) edge and
+  the topmost joist's bottom (downhill) edge — not their anchor points:
+  spacing center-to-center would double-count half of each boundary
+  joist's own thickness at either end. Each edge is a `thickness/2`
+  tangential offset from its joist's anchor, converted to an angle via
+  arc length (`Δt = (thickness/2) / radius`, exact for a circular arc);
+  the interior points then split that `[start, end]` angle range into
+  `internalCurveJoistCount + 1` equal gaps, same convention
+  `ribZPositions`/`inwardInset` already use elsewhere. No joist under the
+  middle of the bottom transition — `buildBottomTransitionFrame`'s own
+  stud wall (top plate, bottom plate, two wall studs, optional internal
+  studs) covers that span instead.
 - **Build-section bays** reuse `ribZPositions`'s own output directly: its
   doubled-seam ribs already pair up as `(ribZs[0],ribZs[1])`,
   `(ribZs[2],ribZs[3])`, ... one bay per pair, so a joist never spans the

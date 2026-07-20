@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { centerFootprint } from "./util";
-import { transitionAndDeckPoints, transitionArcPoints } from "./transition";
+import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
@@ -175,9 +175,12 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
 /**
  * Joist/ledger skeleton: one joist per (profile landmark point) x (build-section bay).
  * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
- * `internalCurveJoistCount` evenly-spaced interior points up the curve (the two ends, bottom
- * corner and notch shelf, are always present regardless of the slider — this count is strictly
- * what's added between them), the coping notch's own shelf point, and the end of the floor
+ * `internalCurveJoistCount` interior points up the curve (the two ends, bottom corner and notch
+ * shelf, are always present regardless of the slider — this count is strictly what's added
+ * between them), spaced evenly by arc length between the bottom-most joist's own *inside edge*
+ * and the topmost joist's own *bottom edge* — not their anchor points, which would over-count
+ * half of each boundary joist's thickness at either end (see `curveStartAngle`/`curveEndAngle`
+ * below) — the coping notch's own shelf point, and the end of the floor
  * section (deck's outer edge, the ramp's own outer edge — the
  * rib's outline terminates exactly there, with no inset, unlike the bottom-corner end). No
  * joist at the deck/curve corner itself (deck start) — tilted to the curve's own tangent there
@@ -233,10 +236,21 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
     copingVerticalProtrusionMm / 1000,
   );
 
-  const sweep = THREE.MathUtils.degToRad(transitionAngleDeg);
+  // Interior joists fill the gap between the two boundary joists' own edges, not their
+  // anchor points: the bottom-most joist's inside (uphill) edge is thickness/2 along its own
+  // (flat) tangent from its (0,0) anchor, and the topmost joist's bottom (downhill) edge is
+  // thickness/2 further back than shelfEnd (shelfLocalPoint, below, already sits thickness/2
+  // back from shelfEnd, at the joist's *center*). Converting that thickness/2 tangential
+  // offset to an angle via arc length (Δt = distance / radius) is exact for a circular arc.
+  const edgeAngle = thickness / 2 / radius;
+  const curveStartAngle = edgeAngle;
+  const curveEndAngle = notch.shelfAngle - edgeAngle;
   const curveSegments = internalCurveJoistCount + 1;
-  const curveInteriorPoints = transitionArcPoints(radius, transitionAngleDeg, curveSegments).slice(1, -1);
-  const curveInteriorAngles = curveInteriorPoints.map((_, i) => ((i + 1) / curveSegments) * sweep);
+  const curveInteriorAngles = Array.from(
+    { length: internalCurveJoistCount },
+    (_, i) => curveStartAngle + ((curveEndAngle - curveStartAngle) * (i + 1)) / curveSegments,
+  );
+  const curveInteriorPoints: [number, number][] = curveInteriorAngles.map((t) => [radius * Math.sin(t), radius * (1 - Math.cos(t))]);
 
   // The shelf-point landmark is inset backward (downhill) along its own tangent by half the
   // joist's thickness, the same "flush face, not centered" convention the deck-outer inset
