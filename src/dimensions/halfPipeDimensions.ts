@@ -81,12 +81,12 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
   );
   // One rib's own X-extent — from its base (the bottommost curve joist's inside face, see
   // ribBaseX above) out to its own deck's outer edge — not the whole ramp's length (lengthDim
-  // above already covers that). Drawn at deck height from the same corner point the height
-  // dimension's own top already sits at (-halfLength, height, -halfWidth), with the same
-  // offset direction, so the two form a single corner bracket instead of two unrelated lines.
+  // above already covers that). Drawn at ground level on the same side (+Z) as the
+  // bottom-transition dimension, chaining off it (ribBaseX sits right next to
+  // -halfBottomTransition) rather than sharing an edge with the height dimension.
   const ribWidthDim = buildLinearDimension(
-    new THREE.Vector3(ribBaseX, height, -halfWidth),
-    new THREE.Vector3(-halfLength, height, -halfWidth),
+    new THREE.Vector3(ribBaseX, bottomTransitionY, halfWidth),
+    new THREE.Vector3(-halfLength, bottomTransitionY, halfWidth),
     new THREE.Vector3(0, 0, 1),
     OFFSET_DISTANCE,
   );

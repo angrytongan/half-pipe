@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import * as THREE from "three";
 import { buildHalfPipeDimensions } from "./halfPipeDimensions";
 import { HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
@@ -112,20 +111,11 @@ describe("buildHalfPipeDimensions", () => {
     expect(ribWidthOf(thick)).toBeGreaterThan(ribWidthOf(thin));
   });
 
-  it("draws the rib width dimension's own offset line at the same corner the height dimension's offset line ends at, forming a corner bracket", () => {
-    const [heightDim, , , , , ribWidthDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+  it("draws the rib width dimension on the ground, on the same +Z side as the bottom-transition dimension", () => {
+    const [, , bottomTransitionDim, , , ribWidthDim] = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+    const halfWidth = HALF_PIPE_DEFAULTS.width / 2;
 
-    // The offset dimension line itself is the 3rd Line child (see buildLinearDimension: the
-    // two extension lines, then the offset line connecting them).
-    const offsetLineEndpoints = (dim: ReturnType<typeof buildHalfPipeDimensions>[number]) => {
-      const offsetLine = dim.group.children[2] as THREE.Line;
-      const positions = offsetLine.geometry.getAttribute("position");
-      return [new THREE.Vector3().fromBufferAttribute(positions, 0), new THREE.Vector3().fromBufferAttribute(positions, 1)];
-    };
-
-    const [, heightLineTop] = offsetLineEndpoints(heightDim); // (-halfLength, height, -halfWidth+0.4)
-    const [, ribWidthLineEnd] = offsetLineEndpoints(ribWidthDim); // (-halfLength, height, -halfWidth+0.4)
-
-    expect(ribWidthLineEnd.distanceTo(heightLineTop)).toBeCloseTo(0, 6);
+    expect(ribWidthDim.labelPosition.y).toBeCloseTo(bottomTransitionDim.labelPosition.y, 6);
+    expect(ribWidthDim.labelPosition.z).toBeCloseTo(halfWidth + 0.4 + 0.08, 2);
   });
 });

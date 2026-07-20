@@ -190,7 +190,7 @@ lines, an offset dimension line with arrowheads, and returns a label position; `
 copies `../obstacle`'s canvas-texture label-sprite approach (`createLabelSprite`) to render
 the text, camera-facing, with no separate DOM overlay to get out of sync.
 
-`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes five dimensions
+`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes six dimensions
 analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingCenters`
 — no need to build the actual rib geometry just to measure it), all anchored to one edge rib
 since every rib is an identical copy of the others:
@@ -217,6 +217,11 @@ since every rib is an identical copy of the others:
   axis either. Measured **outside surface to outside surface**, which is exactly `±width/2` —
   the edge ribs are inset (see Ribs above), so the true overall footprint is exactly the
   `width` param itself, with no overhang.
+- **Rib width** — one rib's own X-extent, from its base (the bottommost curve joist's inside
+  face) out to its own deck's outer edge (not the whole ramp's length — overall length above
+  already covers that). Drawn on the ground, on the same +Z side as the bottom transition
+  length dimension and chained off it (its start sits right next to the bottom transition's
+  own edge), rather than at deck height on the opposite side.
 
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.
