@@ -106,20 +106,30 @@ const resetViewBtn = document.getElementById("reset-view-btn")!;
 const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
 const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
+const scaleToggle = document.getElementById("scale-toggle") as HTMLInputElement;
 const themeToggle = document.getElementById("theme-toggle")!;
+const aboutBtn = document.getElementById("about-btn")!;
+const aboutCloseBtn = document.getElementById("about-close-btn")!;
+const aboutModal = document.getElementById("about-modal") as HTMLDialogElement;
+
+// Single source of truth for the default view — page load and "Reset view" both use these,
+// so they can't drift apart the way they did before (page load had one hardcoded position,
+// reset had another).
+const DEFAULT_CAMERA_POSITION = new THREE.Vector3(-2.8, 1.9, -3.3); // puts the scale figures (positioned at +X/+Z, beyond the ramp) into view
+const DEFAULT_CAMERA_TARGET = new THREE.Vector3(0, 0.6, 0);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xdfe9f0);
 
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-camera.position.set(4, 2.7, 4.7);
+camera.position.copy(DEFAULT_CAMERA_POSITION);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.shadowMap.enabled = true;
 viewport.appendChild(renderer.domElement);
 
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 0.6, 0);
+controls.target.copy(DEFAULT_CAMERA_TARGET);
 controls.zoomToCursor = true; // built-in OrbitControls option — scroll-zoom centers on the pointer
 
 const ambient = new THREE.AmbientLight(0xffffff, 0.6);
@@ -213,6 +223,52 @@ function createLabelSprite(text: string): THREE.Sprite {
   return sprite;
 }
 
+/** A camera-facing human silhouette, for gauging the ramp's height by eye — same billboard technique as createLabelSprite, but a filled head+body shape on a transparent canvas instead of text on an opaque one. */
+function createFigureSprite(heightMeters: number): THREE.Sprite {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 256;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#3a3a3acc";
+
+  const headRadius = canvas.width * 0.22;
+  const headCenterY = headRadius + 4;
+  ctx.beginPath();
+  ctx.arc(canvas.width / 2, headCenterY, headRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  const shoulderY = headCenterY + headRadius * 0.9;
+  const bodyTopWidth = canvas.width * 0.55;
+  const bodyBottomWidth = canvas.width * 0.4;
+  ctx.beginPath();
+  ctx.moveTo(canvas.width / 2 - bodyTopWidth / 2, shoulderY);
+  ctx.lineTo(canvas.width / 2 + bodyTopWidth / 2, shoulderY);
+  ctx.lineTo(canvas.width / 2 + bodyBottomWidth / 2, canvas.height);
+  ctx.lineTo(canvas.width / 2 - bodyBottomWidth / 2, canvas.height);
+  ctx.closePath();
+  ctx.fill();
+
+  const texture = new THREE.CanvasTexture(canvas);
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+  sprite.scale.set(heightMeters * (canvas.width / canvas.height), heightMeters, 1); // sprite is center-anchored, so position.y = heightMeters / 2 puts its feet at ground level
+  return sprite;
+}
+
+const ADULT_FIGURE_HEIGHT_M = 1.7;
+const CHILD_FIGURE_HEIGHT_M = 1.1;
+const adultFigure = createFigureSprite(ADULT_FIGURE_HEIGHT_M);
+const childFigure = createFigureSprite(CHILD_FIGURE_HEIGHT_M);
+scene.add(adultFigure, childFigure);
+
+/** Stands the scale figures just outside the ramp's tallest point (the deck/vert-wall edge), so their height reads directly against it. */
+function repositionFigures(params: HalfPipeParams): void {
+  const footprint = RAMP.footprint(params);
+  const x = footprint.length / 2 - 0.3;
+  const z = params.width / 2 + 0.5;
+  adultFigure.position.set(x, ADULT_FIGURE_HEIGHT_M / 2, z);
+  childFigure.position.set(x, CHILD_FIGURE_HEIGHT_M / 2, z + 0.4);
+}
+
 // Explicit disposer over exactly what the last rebuild created.
 let disposeDimensions: (() => void) | null = null;
 
@@ -303,6 +359,9 @@ function round2(value: number): number {
 }
 
 function renderSpaceStatus(): void {
+  ground.geometry.dispose();
+  ground.geometry = new THREE.PlaneGeometry(availableSpace.length, availableSpace.width);
+
   const required = RAMP.footprint(currentParams);
   spaceStatusEl.innerHTML = SPACE_AXES.map(({ key, label }) => {
     const req = round2(required[key]);
@@ -346,6 +405,7 @@ function rebuildRamp(): void {
 
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);
+  repositionFigures(currentParams);
   renderSpaceStatus();
 }
 
@@ -426,8 +486,8 @@ function resetParams(): void {
 }
 
 function resetView(): void {
-  camera.position.set(6, 4, 7);
-  controls.target.set(0, 0.6, 0);
+  camera.position.copy(DEFAULT_CAMERA_POSITION);
+  controls.target.copy(DEFAULT_CAMERA_TARGET);
   controls.update();
 }
 
@@ -445,6 +505,12 @@ themeToggle.addEventListener("click", () => {
 });
 renderThemeToggle();
 
+aboutBtn.addEventListener("click", () => aboutModal.showModal());
+aboutCloseBtn.addEventListener("click", () => aboutModal.close());
+aboutModal.addEventListener("click", (e) => {
+  if (e.target === aboutModal) aboutModal.close(); // click landed on the backdrop, not the dialog content
+});
+
 resetBtn.addEventListener("click", resetParams);
 resetViewBtn.addEventListener("click", resetView);
 undoBtn.addEventListener("click", undo);
@@ -452,6 +518,21 @@ redoBtn.addEventListener("click", redo);
 dimensionsToggle.addEventListener("input", () => {
   dimensionsGroup.visible = dimensionsToggle.checked;
 });
+scaleToggle.addEventListener("input", () => {
+  adultFigure.visible = scaleToggle.checked;
+  childFigure.visible = scaleToggle.checked;
+});
+
+// Tooltip is position: fixed to escape #panel's overflow clipping, so its screen position has to be computed in JS rather than via CSS anchoring to an ancestor.
+const scaleTooltipTrigger = document.querySelector<HTMLElement>(".tooltip-trigger")!;
+const scaleTooltipBubble = document.querySelector<HTMLElement>(".tooltip-bubble")!;
+function positionScaleTooltip(): void {
+  const rect = scaleTooltipTrigger.getBoundingClientRect();
+  scaleTooltipBubble.style.left = `${rect.left + rect.width / 2}px`;
+  scaleTooltipBubble.style.top = `${rect.top}px`;
+}
+scaleTooltipTrigger.addEventListener("mouseenter", positionScaleTooltip);
+scaleTooltipTrigger.addEventListener("focus", positionScaleTooltip);
 applyDefaults();
 updateHistoryButtons();
 

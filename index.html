@@ -83,13 +83,33 @@
       .app-header .icon-link:hover {
         opacity: 1;
       }
-      #theme-toggle {
+      #theme-toggle,
+      #about-btn {
         background: none;
         border: none;
         padding: 0;
         font-size: 1.1rem;
         line-height: 1;
         cursor: pointer;
+      }
+      #about-modal {
+        max-width: 24rem;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--card-bg);
+        color: var(--text);
+        box-shadow: var(--shadow);
+        padding: 1.2rem;
+      }
+      #about-modal::backdrop {
+        background: #0006;
+      }
+      #about-modal h2 {
+        margin-top: 0;
+      }
+      #about-modal .close-row {
+        text-align: right;
+        margin-top: 1rem;
       }
       .app {
         flex: 1;
@@ -118,6 +138,49 @@
         font-size: 0.85rem;
         margin-bottom: 0.9rem;
         cursor: pointer;
+      }
+      .toggle-row .toggle-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+      }
+      .tooltip-wrap {
+        display: inline-flex;
+      }
+      .tooltip-trigger {
+        display: inline-flex;
+        font-size: 1rem;
+        opacity: 0.75;
+        cursor: help;
+      }
+      .tooltip-trigger:hover,
+      .tooltip-trigger:focus {
+        opacity: 1;
+      }
+      /* position: fixed (not absolute) so it isn't clipped by #panel's overflow-y: auto — left/top are set from JS to track .tooltip-trigger's position */
+      .tooltip-bubble {
+        position: fixed;
+        top: 0;
+        left: 0;
+        transform: translate(-50%, calc(-100% - 8px));
+        width: max-content;
+        max-width: 11rem;
+        white-space: normal;
+        background: var(--text);
+        color: var(--bg);
+        padding: 0.4rem 0.6rem;
+        border-radius: 6px;
+        font-size: 0.75rem;
+        font-weight: 400;
+        line-height: 1.3;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.1s;
+        z-index: 10;
+      }
+      .tooltip-trigger:hover + .tooltip-bubble,
+      .tooltip-trigger:focus + .tooltip-bubble {
+        opacity: 1;
       }
       .slider-row {
         margin-bottom: 0.9rem;
@@ -209,6 +272,7 @@
     <header class="app-header">
       <span class="icon-skate" role="img" aria-label="Person skateboarding">🛹</span>
       <span class="app-title">half-pipe</span>
+      <button type="button" id="about-btn" class="icon-link" aria-label="About this app">ⓘ</button>
       <div class="spacer"></div>
       <span class="pill">in development</span>
       <button type="button" id="theme-toggle" class="icon-link" aria-label="Toggle dark mode"></button>
@@ -228,6 +292,16 @@
         </svg>
       </a>
     </header>
+    <dialog id="about-modal">
+      <h2>half-pipe</h2>
+      <p>
+        A browser tool for planning skateboard half-pipe builds — adjust its parameters via sliders and see the 3D
+        shape update live. Standalone: no terrain, no saved projects, just geometry.
+      </p>
+      <div class="close-row">
+        <button type="button" id="about-close-btn">Close</button>
+      </div>
+    </dialog>
     <div class="app">
       <div id="panel" class="card">
         <div class="history-buttons">
@@ -236,6 +310,18 @@
         </div>
         <button type="button" id="reset-view-btn">Reset view</button>
         <label class="toggle-row">Show dimensions<input type="checkbox" id="dimensions-toggle" checked /></label>
+        <div class="toggle-row">
+          <span class="toggle-label">
+            <label for="scale-toggle">Show scale</label>
+            <span class="tooltip-wrap">
+              <span class="tooltip-trigger" tabindex="0" aria-label="About the scale figures">ⓘ</span>
+              <span class="tooltip-bubble" role="tooltip"
+                >Scale figures for gauging the ramp's height by eye. Adult: 1.7 m. Child: 1.1 m.</span
+              >
+            </span>
+          </span>
+          <input type="checkbox" id="scale-toggle" checked />
+        </div>
         <details open>
           <summary>Available space</summary>
           <div id="space-sliders"></div>
