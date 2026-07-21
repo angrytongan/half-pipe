@@ -168,6 +168,46 @@ export function tileFromEdgeClipped(halfSpan: number, size: number): [number, nu
 }
 
 /**
+ * Segments covering [-halfSpan, halfSpan] with up to `size`-wide pieces, starting flush at
+ * +halfSpan and tiling toward -halfSpan — tileFromEdgeClipped's own mirror image, built by
+ * running its same algorithm from -halfSpan (so starterWidth still means "the first piece
+ * placed", now the one nearest +halfSpan) and reflecting every segment through 0. Anchoring to
+ * the opposite edge from layer 1's own tileFromEdgeClipped columns keeps the two layers'
+ * (potentially clipped) end pieces on opposite sides of the ramp — see staggeredZColumns.
+ */
+export function tileFromOppositeEdgeClipped(halfSpan: number, size: number, starterWidth = size): [number, number][] {
+  const segments: [number, number][] = [];
+  let pos = -halfSpan;
+  let first = true;
+  while (pos < halfSpan - TILE_EPSILON) {
+    const step = first ? starterWidth : size;
+    const next = Math.min(pos + step, halfSpan);
+    segments.push([pos, next]);
+    pos = next;
+    first = false;
+  }
+  return segments.map(([a, b]): [number, number] => [-b, -a]).reverse();
+}
+
+/**
+ * Layer 2's own curve-sheet Z-columns across the ramp's width. Normally tiled from the opposite
+ * edge to layer 1's own columns (tileFromEdgeClipped), so their seams land in different places
+ * even when both layers use the same sheet size — the width-direction counterpart to
+ * curveSheetRows' arc-direction staggering. Falls back to an explicit half-sheet-length stagger
+ * instead when starting from the opposite edge alone doesn't actually decouple them: if the
+ * ramp's width divides evenly by layer 2's own sheet length, the tiling is symmetric and so
+ * produces the identical seams regardless of which edge it starts from. See
+ * buildHalfPipeSkinLayer2.
+ */
+export function staggeredZColumns(halfSpan: number, layer1SheetLength: number, layer2SheetLength: number): [number, number][] {
+  const seamsOf = (segments: [number, number][]) => segments.slice(0, -1).map(([, end]) => end);
+  const layer1Seams = seamsOf(tileFromEdgeClipped(halfSpan, layer1SheetLength));
+  const opposite = tileFromOppositeEdgeClipped(halfSpan, layer2SheetLength);
+  const coincide = layer1Seams.some((a) => seamsOf(opposite).some((b) => Math.abs(a - b) < 1e-6));
+  return coincide ? tileFromOppositeEdgeClipped(halfSpan, layer2SheetLength, layer2SheetLength / 2) : opposite;
+}
+
+/**
  * Segments covering [-halfSpan, halfSpan] with up to `size`-wide pieces, the first centered on
  * 0 (clipped to halfSpan if it would overhang — e.g. a sheet longer than the bottom transition
  * is flush, not clipped, is short), the rest tiling outward from there to each edge, clipped

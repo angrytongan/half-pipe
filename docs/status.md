@@ -338,22 +338,33 @@ Empty if that reach alone already covers to the ramp's centerline (`tileCentered
 sheets use its own sheet size and its own `flatExtension`, but aren't staggered against layer
 1's flat sheets — see features.md.
 
-**Layer 2's two differences from layer 1** (both in `buildHalfPipeSkinLayer2`):
-1. *Staggered seams* — `curveSheetRows`' topmost row is half-width
+**Layer 2's differences from layer 1** (all in `buildHalfPipeSkinLayer2`):
+1. *Staggered seams, arc direction* — `curveSheetRows`' topmost row is half-width
    (`skinLayer2SheetWidth / 2`) instead of the full width every row after it uses, so every
    layer-2 seam lands at the midpoint of whichever layer-1 sheet spans it (when both layers
    share the same sheet width — the default) rather than lining up with a layer-1 seam, the
    standard staggered-joint practice. That guarantee only holds for *full* (non-ground-clamped)
    rows — the ground-most row's own real extent is set by where it hits the ground, not by the
    nominal row width, so its "midpoint" isn't the nominal one either.
-2. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
+2. *Staggered seams, width (Z) direction* — `staggeredZColumns` (skin.ts) tiles layer 2's own
+   curve-sheet columns from the ramp's `+width/2` edge instead of layer 1's `-width/2`
+   (`tileFromOppositeEdgeClipped`, built by mirroring `tileFromEdgeClipped`'s own output rather
+   than a separate implementation), so their seams land on different sides even when both
+   layers use the same sheet length. If the ramp's width divides evenly by the sheet length,
+   starting from either edge produces the identical seams — `staggeredZColumns` detects that
+   (any seam coinciding between the two layers) and falls back to an explicit half-sheet-length
+   starter piece for layer 2's columns instead, the same trick `curveSheetRows` uses for the arc
+   direction.
+3. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
    a straight line, along its own tangent direction at the notch, until it reaches the pipe
    (`copingTouchExtension`, an exact line-circle intersection) — a straight-line extension, not
    a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). The
    outer and inner edges get their *own* extension distances, computed separately — reusing one
    edge's distance for the other would either undershoot it or (typically) drive it straight
    through the pipe, since the two edges start different distances away. The pipe itself isn't
-   repositioned; only this one sheet reaches further to meet it.
+   repositioned; only this one sheet reaches further to meet it. Renders with a beveled tip since
+   the two edges extend by different amounts — tracked in features.md as a simplification to
+   revisit (square it off instead, accepting a negligible gap/overlap).
 
 ## Dimension lines
 

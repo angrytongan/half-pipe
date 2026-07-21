@@ -41,15 +41,27 @@ in red, so both stay distinguishable from each other and from the ribs
 underneath (see status.md) — not the intended final materials.
 
 Layer 2 has its own, independent sheet-size sliders
-(`skinLayer2SheetLength`/`skinLayer2SheetWidth`) and two differences from
-layer 1: its seams are staggered to the midpoint of layer 1's sheets
-(`curveSheetRows`' half-width starter row), and its topmost sheet is
-extended in a straight line along the curve's own tangent direction until
-it touches the coping pipe (`copingTouchExtension`) — see status.md for
-both.
+(`skinLayer2SheetLength`/`skinLayer2SheetWidth`) and three differences
+from layer 1: its seams are staggered to the midpoint of layer 1's sheets
+both along the curve (`curveSheetRows`' half-width starter row) and
+across the ramp's width (`staggeredZColumns`, tiling from the opposite
+edge to layer 1's own columns, or an explicit half-sheet stagger if that
+alone wouldn't decouple them); and its topmost sheet is extended in a
+straight line along the curve's own tangent direction until it touches
+the coping pipe (`copingTouchExtension`) — see status.md for all three.
 
 Remaining:
 
+- [ ] The sheet meeting the coping (layer 2's topmost row, extended via
+      `copingTouchExtension`) currently renders with a beveled/angled cut
+      at its tip, since the outer and inner edges are extended by their own
+      separately-solved distances (see buildHalfPipeSkinLayer2) — a wedge,
+      not a square edge. Accepted fix: square that edge off instead, using
+      the inner edge's own extension distance for both edges (the earlier,
+      simpler rectangular-cap approach this wedge replaced) — the outer
+      edge may then land slightly short of, or slightly past, the pipe's
+      actual surface, but that gap/overlap is small enough to be
+      irrelevant.
 - [ ] Layer 2's flat (bottom-transition) sheets aren't staggered against
       layer 1's flat sheets — only the curved coverage's seams are staggered.
       Since layer 1's own flat-sheet orientation is itself chosen per-ramp

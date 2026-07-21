@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { buildSkinCurveSheet, copingTouchExtension, curveSheetRows } from "./skin";
+import { buildSkinCurveSheet, copingTouchExtension, curveSheetRows, staggeredZColumns, tileFromEdgeClipped, tileFromOppositeEdgeClipped } from "./skin";
 
 /** Every vertex's distance from the transition's own arc center, local (0, radius) — ignoring Z, since the shape is just extruded straight along it. */
 function vertexDistancesFromCenter(geometry: THREE.BufferGeometry, radius: number): number[] {
@@ -188,5 +188,70 @@ describe("copingTouchExtension", () => {
     const pipeCenter: [number, number] = [-5, -5]; // far off in the opposite direction
     const d = copingTouchExtension(radius, r, sweep, pipeCenter, 0.03);
     expect(d).toBe(0);
+  });
+});
+
+describe("tileFromOppositeEdgeClipped", () => {
+  it("covers the same total span as tileFromEdgeClipped, just mirrored", () => {
+    const halfSpan = 1.5;
+    const size = 1.2;
+    const normal = tileFromEdgeClipped(halfSpan, size);
+    const opposite = tileFromOppositeEdgeClipped(halfSpan, size);
+    expect(opposite).toHaveLength(normal.length);
+    // every segment in one has a mirrored counterpart (negated and swapped) in the other
+    for (const [a, b] of normal) {
+      expect(opposite.some(([c, d]) => Math.abs(c - -b) < 1e-9 && Math.abs(d - -a) < 1e-9)).toBe(true);
+    }
+  });
+
+  it("starts flush at +halfSpan and clips the last piece near -halfSpan instead", () => {
+    const halfSpan = 1.5;
+    const size = 1.2; // doesn't divide 3 evenly, so there's a real clipped piece to find
+    const segments = tileFromOppositeEdgeClipped(halfSpan, size);
+    expect(segments[segments.length - 1][1]).toBeCloseTo(halfSpan, 10); // last piece ends flush at +halfSpan
+    const firstSpan = segments[0][1] - segments[0][0];
+    expect(firstSpan).toBeLessThan(size - 1e-9); // the clipped piece is the first one, at -halfSpan
+  });
+
+  it("sizes the piece nearest +halfSpan by starterWidth instead of size", () => {
+    const halfSpan = 3;
+    const size = 1.2;
+    const starterWidth = 0.6;
+    const segments = tileFromOppositeEdgeClipped(halfSpan, size, starterWidth);
+    const lastSpan = segments[segments.length - 1][1] - segments[segments.length - 1][0];
+    expect(lastSpan).toBeCloseTo(starterWidth, 10);
+  });
+});
+
+describe("staggeredZColumns", () => {
+  it("uses the opposite-edge tiling when that alone already avoids matching layer 1's seams", () => {
+    const halfSpan = 1.5;
+    const layer1Size = 2.4; // doesn't divide 3 evenly — starting from either edge gives different seams
+    const columns = staggeredZColumns(halfSpan, layer1Size, layer1Size);
+    expect(columns).toEqual(tileFromOppositeEdgeClipped(halfSpan, layer1Size));
+  });
+
+  it("falls back to a half-sheet-length stagger when the ramp's width divides evenly by the sheet length", () => {
+    const halfSpan = 2.4; // width 4.8, an exact multiple of a 2.4m sheet — symmetric either way
+    const size = 2.4;
+    const plainOpposite = tileFromOppositeEdgeClipped(halfSpan, size);
+    const columns = staggeredZColumns(halfSpan, size, size);
+    expect(columns).not.toEqual(plainOpposite);
+    const lastSpan = columns[columns.length - 1][1] - columns[columns.length - 1][0];
+    expect(lastSpan).toBeCloseTo(size / 2, 10);
+  });
+
+  it("still avoids matching seams when layer 2 uses a different sheet length than layer 1", () => {
+    const halfSpan = 3;
+    const layer1Size = 1.5; // divides 6 evenly on its own
+    const layer2Size = 1.2; // different size — seams shouldn't coincide anyway
+    const columns = staggeredZColumns(halfSpan, layer1Size, layer2Size);
+    const layer1Seams = tileFromEdgeClipped(halfSpan, layer1Size)
+      .slice(0, -1)
+      .map(([, end]) => end);
+    const columnSeams = columns.slice(0, -1).map(([, end]) => end);
+    for (const seam of layer1Seams) {
+      expect(columnSeams.some((s) => Math.abs(s - seam) < 1e-6)).toBe(false);
+    }
   });
 });

@@ -19,7 +19,7 @@ import {
 import { ribZPositions } from "./ribs";
 import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
-import { copingTouchExtension, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { copingTouchExtension, curveSheetRows, staggeredZColumns, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -1002,6 +1002,29 @@ describe("buildHalfPipeSkinLayer2", () => {
     const right = xExtents.filter((x) => x > 0);
     const left = xExtents.filter((x) => x < 0);
     expect(right).toHaveLength(left.length);
+  });
+
+  it("starts its curve-sheet Z-columns from the opposite edge to layer 1's own columns", () => {
+    // a width that doesn't divide evenly by the (matching) sheet lengths, so the two edges
+    // genuinely produce different seams — the plain opposite-edge tiling, not the fallback stagger
+    const params = { ...HALF_PIPE_DEFAULTS, width: 3, skinSheetLength: 2.4, skinLayer2SheetLength: 2.4 };
+    const layer1ZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
+    const layer2ZColumns = staggeredZColumns(params.width / 2, params.skinSheetLength, params.skinLayer2SheetLength);
+    expect(layer2ZColumns).not.toEqual(layer1ZColumns);
+
+    const sheets = buildHalfPipeSkinLayer2(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const rightCurveSheets = sheets.filter((g) => g.type === "ExtrudeGeometry" && (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2 > 0);
+    const zSpans = new Set(rightCurveSheets.map((g) => `${g.boundingBox!.min.z.toFixed(6)},${g.boundingBox!.max.z.toFixed(6)}`));
+    const expectedZSpans = new Set(layer2ZColumns.map(([s, e]) => `${s.toFixed(6)},${e.toFixed(6)}`));
+    expect(zSpans).toEqual(expectedZSpans);
+  });
+
+  it("falls back to a staggered start when the ramp's width divides evenly by the (matching) sheet length", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, width: 4.8, skinSheetLength: 2.4, skinLayer2SheetLength: 2.4 };
+    const layer2ZColumns = staggeredZColumns(params.width / 2, params.skinSheetLength, params.skinLayer2SheetLength);
+    const lastSpan = layer2ZColumns[layer2ZColumns.length - 1][1] - layer2ZColumns[layer2ZColumns.length - 1][0];
+    expect(lastSpan).toBeCloseTo(params.skinLayer2SheetLength / 2, 10); // the staggered starter piece, not a full sheet
   });
 });
 
