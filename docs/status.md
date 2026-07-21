@@ -48,9 +48,12 @@ unit for a plywood thickness — converted to meters only where it feeds
 `THREE.ExtrudeGeometry`/`ribZPositions`. `ribs.ts`'s `RIB_THICKNESS_MM` is
 the constant this slider default comes from — `ribZPositions`/`extrudeRibs`
 themselves take count/thickness as parameters, not module constants, so
-they're fully driven by the sliders. `src/main.ts` renders one
-`THREE.Mesh` per rib geometry inside a `THREE.Group` (`rampGroup`),
-sharing the existing ramp material.
+they're fully driven by the sliders. `buildHalfPipeRibsBySection` splits the same ribs into
+`edgeRibs` (the two mandatory ones — always the first/last of `ribZPositions`' output, still
+visible once skinned since the skin wraps around them) and `internalRibs` (the seam ribs,
+buried inside the skin); `src/main.ts` renders each into its own `THREE.Group`
+(`edgeRibGroup`/`internalRibGroup`, both sharing the existing ramp material) so "Show skin" can
+hide the latter without touching the former — see Scene below.
 
 The transition curve's bottom tangent point sits on top of the bottom
 transition's own framing, not on the raw ground: `halfPipeOutline` shifts
@@ -153,7 +156,15 @@ section bay) pair:
   already cut away into the notch, so a centered joist would have nothing
   to sit flush against on that side. Sitting below/behind the corner,
   inside the notch, it can't rise above the deck the way the
-  corner-anchored version did. The `internalCurveJoistCount` interior
+  corner-anchored version did. A fourth deck-level joist sits at the
+  deck's *inner* edge, where `copingNotch`'s plumb wall cuts into it —
+  `notch.wallTop` is already the point where that vertical cut meets the
+  flat deck, used directly as its anchor. Flat like the deck-outer joist,
+  but inset the *opposite* way (outward, by `thickness / 2` — a negative
+  `inwardInset` value) since the deck material here starts at the wall and
+  runs outward from it, the mirror image of the deck-outer landmark's own
+  edge convention — so it's this joist's notch-side face, not its center,
+  that lands flush against the wall. The `internalCurveJoistCount` interior
   points are spaced *evenly by arc length between the two boundary
   joists' own edges* — the bottom-most joist's inside (uphill) edge and
   the topmost joist's bottom (downhill) edge — not their anchor points:
@@ -190,9 +201,33 @@ section bay) pair:
   `(x, y)` along the tilted face's own normal `(-sin(angle), cos(angle))` to
   compute the actual box center.
 
-`src/main.ts` renders these in their own `THREE.Group` (`joistGroup`) with
-a distinct wood-toned material, so dozens of small joist boxes read as a
-different material from the blue ribs rather than visual noise.
+`buildHalfPipeJoists` (flat array, all landmarks) is a thin wrapper around
+`buildHalfPipeJoistsBySection`, which splits the same joists into `curveJoists`
+(bottom-corner, curve-interior, notch-shelf — under the curved/vert surface)
+and `deckJoists` (deck-outer, deck-inner at the notch's plumb wall,
+ground-below-deck-outer, ground-midpoint — under the flat deck/ground);
+`main.ts` renders each into its own `THREE.Group`
+(`curveJoistGroup`/`deckJoistGroup`, both a distinct wood-toned material so
+dozens of small joist boxes read as different material from the blue ribs
+rather than visual noise) so "Show skin" can hide the former without touching
+the latter — see Scene below.
+
+### Deck
+
+`buildHalfPipeDeck` (`halfPipe.ts`) is the first physical piece of the deck itself, not just its
+joists — one flat board per side, the same material/thickness as the ribs (`ribThicknessMm`).
+Runs in X from the coping notch's vertical wall (`notch.wallTop` — the same point the deck-inner
+joist anchors to, see Joists above) out to the rib's own outer edge (`deckOuter`, the ramp's
+rear) — a plain box, not yet split into build sections or real sheet sizes the way the ribs/skin
+sliders are, since a flat board doesn't need to bend the way the curved skin will. Spans the
+full `width` in Z, flush with the edge ribs' *outer* faces — it sits over them, unlike a joist,
+which insets to their *inside* faces and stops between them. Sits on top of the deck joists: its
+bottom face is flush with their top face (the rib's own drawn deck line), extending upward by
+its own thickness — so its top surface ends up `ribThicknessMm` above that line, since the line
+itself is only a stand-in for the finished surface height and hasn't been repositioned yet (see
+features.md's Coping entry). `main.ts` renders it into its own `THREE.Group` (`deckGroup`,
+reusing the ribs' own material) that's always visible — unlike the internal ribs/curve joists,
+it isn't hidden by "Show skin".
 
 ### Coping
 
@@ -201,7 +236,21 @@ corner (see `research/coping.md` for the pipe stock and required protrusions it'
 from) — two straight cuts, as it'd actually be built: a plumb wall and a horizontal shelf,
 both tangent to the pipe (not the wall fixed at the corner's own X — the pipe is much bigger
 than the protrusion specs, so it sits mostly recessed back under the deck, and a wall fixed at
-the corner would cut straight through it instead of meeting its rear face). The shelf's far
+the corner would cut straight through it instead of meeting its rear face). Neither protrusion
+spec is measured against the bare rib corner point anymore: `copingVerticalProtrusionMm` (and
+so the shelf it produces) is measured from the deck board's own top surface — a `deckThickness`
+parameter added once `buildHalfPipeDeck` gave that surface an actual thickness to measure from
+(`cornerY + deckThickness`, *added* since the deck's rideable side faces up) — and
+`copingHorizontalProtrusionMm` (and so the wall's X, `wallX`/`pipeCenterX`) is likewise measured
+from the *skinned* curve surface, a `skinThickness` parameter (`skinLayer1ThicknessMm +
+skinLayer2ThicknessMm`, the two layers laid onto the rib on the curve) — but *subtracted*:
+`cornerX - skinThickness`, not `+`. The curve's rideable (concave) side faces its arc's own
+center, which at this corner is toward *smaller* X (the ramp's interior) — the same direction
+the pipe already protrudes past the corner — not toward the deck side (+X) the way the naive
+"same sign as the deck" version first got it. `wallTop`'s Y still anchors to the bare corner
+point directly, though — that's the one piece of "measure from the covered surface, not the
+bare rib" left unrepositioned; see features.md's Coping entry.
+The shelf's far
 end is found where the transition arc itself reaches shelf height, via an exact `acos`/`sin`
 circle intersection rather than the wall's tangent-line direction — at this radius/notch-size
 ratio a straight-line approximation would be off by a fraction of a millimeter, comparable to
@@ -226,6 +275,85 @@ that bound; if setting the attribute clamps the other input's `.value`, a synthe
 is dispatched on it so the existing per-slider state-sync/rebuild wiring still fires (a
 before/after `.value` check stops the two listeners from ping-ponging). Re-wired every time the
 coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to defaults").
+
+### Skin
+
+A "Skin" section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the
+ground) and `skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default
+12mm each; four more for sheet size — `skinSheetLength`/`skinSheetWidth` for layer 1 and
+`skinLayer2SheetLength`/`skinLayer2SheetWidth` for layer 2, independent of each other (1–3.6m /
+0.6–1.5m, default 2.4m/1.2m each — a standard "8×4" sheet); and a `skinGrainDirection` select
+(`"length-ways"` default / `"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way
+a sheet is laid relative to the ribs — length-ways runs the sheet's major axis perpendicular to
+the ribs (bending across the minor axis), width-ways the reverse; not yet consumed by any
+geometry (see features.md). All are `HalfPipeParams` fields like everywhere else, so undo/redo
+and "Reset to defaults" already cover them for free. The select is wired by hand in `main.ts`
+rather than through `renderSliderList` (that helper is number-only) — its `change` listener
+records an undo snapshot the same way `resetParams` does, and `renderAllSliderGroups` syncs its
+displayed value from `currentParams` on load/undo/redo/reset.
+
+`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1`/`buildHalfPipeSkinLayer2` build
+each layer's full coverage — curved sheets up the transition plus flat sheets filling in the
+bottom transition. Layer 1 rendered solid (`skinGroup` in `main.ts`), one `MeshStandardMaterial`
+per sheet, all the same green hue (`SKIN_HUE`) but a different lightness each (`0.25` to `0.75`,
+spread evenly across however many sheets there are) so individual sheets are distinguishable —
+not because it's the intended final material. `side: THREE.DoubleSide`, same as the rib material
+— the left side's sheets are built by mirroring (`geometry.scale(-1,1,1)`), which flips winding
+without correcting it. Layer 2 rendered wireframe in red instead (`skinLayer2Group`,
+`EdgesGeometry` with the same 20° threshold angle layer 1's own wireframe used to have, dropping
+the curve's internal arc-facet seams) — kept visually distinct from layer 1's solid green so
+both layers, and how layer 2's seams stagger against layer 1's, stay readable at once. Both
+groups toggle together with "Show skin".
+
+**Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
+arcs sharing the transition's own center — the outer edge at `radius - outerOffset`, the inner
+(exposed, rideable-side) edge a further `thickness` in from that. Offsetting a circle by a
+constant distance along its own normal is just a smaller concentric circle, so this is exact,
+not approximated. `outerOffset` is 0 for layer 1 (its outer edge sits on the bare curve) and
+`skinLayer1ThicknessMm` for layer 2 (its outer edge sits on layer 1's own outer surface instead
+— see buildHalfPipeSkinLayer2). Tiled in `skinSheetWidth`-wide (or `skinLayer2SheetWidth` for
+layer 2) arc-length rows (not X-projection — bent plywood doesn't stretch), grain (the long
+`skinSheetLength`/`skinLayer2SheetLength` edge) running parallel to the ramp's width (Z),
+perpendicular to the ribs — the only orientation that lets a sheet bend up the curve at all;
+that's a hard physical constraint, not something `skinGrainDirection` picks. Tiled *from the
+coping notch's own `shelfAngle` (see coping.ts) downward* to the ground tangent, via
+`curveSheetRows` (skin.ts) — a full sheet sits at the notch. The ground-most row usually runs
+out of curve before it runs out of sheet; rather than cut it short there, `curveSheetShape`'s
+`flatExtension` continues that leftover length flat, past the ground tangent and onto the
+bottom transition (only when its own `t0` is exactly 0 — nothing to attach a lead-in to
+otherwise) — the same way a real sheet just lies flat once the surface under it stops bending.
+Tiled across Z in `skinSheetLength`/`skinLayer2SheetLength` columns (`tileFromEdgeClipped`,
+skin.ts), clipped at the ramp's edges (±width/2) instead of overhanging.
+
+**Flat sheets**: `buildSkinFlatSheet`, plain boxes filling in whatever of the bottom transition
+the curve rows' own `flatExtension` doesn't already reach — nothing bends there, so there's no
+grain constraint on orientation, unlike the curve sheets. Both orientations (long edge along X,
+long edge along Z) are tiled and compared, and whichever needs fewer total sheets wins (ties
+keep long-edge-X) — forcing one direction can mean more cuts/wasted offcuts than the ramp's own
+proportions actually call for. Centered at X=0 (`tileCenteredClipped`, skin.ts), tiled outward,
+clipped to `±(half - flatExtension)` (both curve rows share the same `flatExtension`, by
+left/right symmetry) so they butt flush against the curve rows' own reach — no gap, no overlap.
+Empty if that reach alone already covers to the ramp's centerline (`tileCenteredClipped` returns
+`[]` for a non-positive span). Also clipped at the ramp's edges (±width/2). Layer 2's own flat
+sheets use its own sheet size and its own `flatExtension`, but aren't staggered against layer
+1's flat sheets — see features.md.
+
+**Layer 2's two differences from layer 1** (both in `buildHalfPipeSkinLayer2`):
+1. *Staggered seams* — `curveSheetRows`' topmost row is half-width
+   (`skinLayer2SheetWidth / 2`) instead of the full width every row after it uses, so every
+   layer-2 seam lands at the midpoint of whichever layer-1 sheet spans it (when both layers
+   share the same sheet width — the default) rather than lining up with a layer-1 seam, the
+   standard staggered-joint practice. That guarantee only holds for *full* (non-ground-clamped)
+   rows — the ground-most row's own real extent is set by where it hits the ground, not by the
+   nominal row width, so its "midpoint" isn't the nominal one either.
+2. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
+   a straight line, along its own tangent direction at the notch, until it reaches the pipe
+   (`copingTouchExtension`, an exact line-circle intersection) — a straight-line extension, not
+   a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). The
+   outer and inner edges get their *own* extension distances, computed separately — reusing one
+   edge's distance for the other would either undershoot it or (typically) drive it straight
+   through the pipe, since the two edges start different distances away. The pipe itself isn't
+   repositioned; only this one sheet reaches further to meet it.
 
 ## Dimension lines
 
@@ -323,10 +451,16 @@ hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positio
 from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
 `position: absolute` descendants that overflow it.
 
-A "Show bottom transition" checkbox (`#bottom-transition-toggle`, under "Show scale") toggles
-`bottomTransitionGroup.visible` directly, same pattern as the dimensions/scale toggles above —
-`bottomTransitionGroup.clear()` on rebuild only removes children, it doesn't reset the group's
-own `.visible`, so the hidden/shown state survives param changes without re-wiring.
+A "Show skin" checkbox (`#skin-toggle`, under "Show scale", unchecked by default) toggles four
+groups at once: checking it hides `bottomTransitionGroup`, `curveJoistGroup`, and
+`internalRibGroup` (structure a skin would cover or bury) and shows `skinGroup` — same
+direct-`.visible` pattern as the dimensions/scale toggles above, so the hidden/shown state
+survives param changes without re-wiring. `deckJoistGroup` and `edgeRibGroup` aren't touched
+either way — the deck/ground joists and the two mandatory edge ribs stay visible regardless (the
+edge ribs still show through/around a skin, they're not buried by it). `skinGroup` exists
+(empty, `.visible = false` initially) as the future home for skin geometry — not built yet (see
+Skin above), so checking "Show skin" today only hides structure, and renders nothing in its
+place.
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
@@ -339,9 +473,9 @@ title that opens a native `<dialog id="about-modal">` describing the app — `.s
 closed via its own button, a backdrop click, or the native Esc handling `<dialog>` provides for
 free — "in development" pill, GitHub link) matching `obstacle`'s header, above an
 `.app` flex row holding the `#panel` (the undo/redo buttons, then the
-reset-view button and "Show dimensions" toggle, at the top, then an accordion of six
+reset-view button and "Show dimensions" toggle, at the top, then an accordion of seven
 independently-collapsible sections — Available space, Ramp parameters,
-Ribs, Joists, Bottom transition, Coping, each a plain native
+Ribs, Joists, Bottom transition, Coping, Skin, each a plain native
 `<details>`/`<summary>` so no JS is needed — then the reset-to-defaults
 button) and `#viewport` (3D view) cards. Both share a `.card` class
 (border/radius/shadow/opaque background — `var(--card-bg)`); `#viewport`

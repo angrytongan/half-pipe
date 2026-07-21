@@ -322,7 +322,7 @@
           </span>
           <input type="checkbox" id="scale-toggle" checked />
         </div>
-        <label class="toggle-row">Show bottom transition<input type="checkbox" id="bottom-transition-toggle" checked /></label>
+        <label class="toggle-row">Show skin<input type="checkbox" id="skin-toggle" /></label>
         <details open>
           <summary>Available space</summary>
           <div id="space-sliders"></div>
@@ -346,6 +346,17 @@
         <details>
           <summary>Coping</summary>
           <div id="coping-sliders"></div>
+        </details>
+        <details>
+          <summary>Skin</summary>
+          <div id="skin-sliders"></div>
+          <label class="toggle-row"
+            >Grain direction
+            <select id="skin-grain-direction">
+              <option value="length-ways">Length-ways</option>
+              <option value="width-ways">Width-ways</option>
+            </select>
+          </label>
         </details>
         <button type="button" id="reset-btn">Reset to defaults</button>
       </div>

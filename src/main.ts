@@ -2,12 +2,16 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   buildBottomTransitionFrame,
-  buildHalfPipeJoists,
-  buildHalfPipeRibs,
+  buildHalfPipeDeck,
+  buildHalfPipeJoistsBySection,
+  buildHalfPipeRibsBySection,
+  buildHalfPipeSkinLayer1,
+  buildHalfPipeSkinLayer2,
   HALF_PIPE_DEFAULTS,
   halfPipeCopingCenters,
   halfPipeFootprint,
   type HalfPipeParams,
+  type SkinGrainDirection,
 } from "./ramps/halfPipe";
 import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
 import { HistoryStack } from "./history";
@@ -33,10 +37,23 @@ interface RampSpec {
   bottomTransitionSliders: SliderSpec[];
   rampSliders: SliderSpec[];
   copingSliders: SliderSpec[];
-  buildRibs: (params: HalfPipeParams) => THREE.BufferGeometry[];
-  buildJoists: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  skinSliders: SliderSpec[];
+  // Edge ribs (frame the deck edges, stay visible once skinned) vs internal seam ribs (buried
+  // inside the skin, hidden by "Show skin") — see buildHalfPipeRibsBySection.
+  buildRibsBySection: (params: HalfPipeParams) => { edgeRibs: THREE.BufferGeometry[]; internalRibs: THREE.BufferGeometry[] };
+  // Curve joists (under the curved/vert surface, hidden by "Show skin") vs deck joists (under
+  // the flat deck/ground, always visible) — see buildHalfPipeJoistsBySection.
+  buildJoistsBySection: (params: HalfPipeParams) => { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] };
+  // The deck itself — one board per side, always visible (not hidden by "Show skin").
+  buildDeck: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // The bottom transition's own framing — a stud wall lying on the ground.
   buildBottomTransitionFrame: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  // Layer 1 skin — curved coverage over the transition plus flat coverage on the bottom
+  // transition (see buildHalfPipeSkinLayer1).
+  buildSkinLayer1: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  // Layer 2 skin — same shape as layer 1, staggered against it and touching the coping (see
+  // buildHalfPipeSkinLayer2).
+  buildSkinLayer2: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // Centers (in the built geometry's own centered coordinate space) of the coping tubes —
   // the curve/deck lip, not the deck's outer edge. See decisions.md.
   copingCenters: (params: HalfPipeParams) => { x: number; y: number }[];
@@ -67,6 +84,14 @@ const RAMP: RampSpec = {
     { key: "copingHorizontalProtrusionMm", label: "Horizontal protrusion (mm)", min: 0, max: 15, step: 0.1 },
     { key: "copingVerticalProtrusionMm", label: "Vertical protrusion (mm)", min: 0, max: 15, step: 0.1 },
   ],
+  skinSliders: [
+    { key: "skinLayer1ThicknessMm", label: "Layer 1 thickness (mm)", min: 3, max: 25, step: 1 },
+    { key: "skinLayer2ThicknessMm", label: "Layer 2 thickness (mm)", min: 3, max: 25, step: 1 },
+    { key: "skinSheetLength", label: "Layer 1 sheet length (m)", min: 1, max: 3.6, step: 0.01 },
+    { key: "skinSheetWidth", label: "Layer 1 sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
+    { key: "skinLayer2SheetLength", label: "Layer 2 sheet length (m)", min: 1, max: 3.6, step: 0.01 },
+    { key: "skinLayer2SheetWidth", label: "Layer 2 sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
+  ],
   rampSliders: [
     { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
     { key: "transitionAngleDeg", label: "Transition angle (°)", min: 45, max: 90, step: 1 },
@@ -74,9 +99,12 @@ const RAMP: RampSpec = {
     { key: "deckLength", label: "Deck length (m)", min: 0.3, max: 1.5, step: 0.1 },
     { key: "width", label: "Width (m)", min: 1, max: 4, step: 0.1 },
   ],
-  buildRibs: buildHalfPipeRibs,
-  buildJoists: buildHalfPipeJoists,
+  buildRibsBySection: buildHalfPipeRibsBySection,
+  buildJoistsBySection: buildHalfPipeJoistsBySection,
+  buildDeck: buildHalfPipeDeck,
   buildBottomTransitionFrame: buildBottomTransitionFrame,
+  buildSkinLayer1: buildHalfPipeSkinLayer1,
+  buildSkinLayer2: buildHalfPipeSkinLayer2,
   copingCenters: halfPipeCopingCenters,
   footprint: halfPipeFootprint,
   buildDimensions: buildHalfPipeDimensions,
@@ -100,6 +128,8 @@ const ribSlidersEl = document.getElementById("rib-sliders")!;
 const joistSlidersEl = document.getElementById("joist-sliders")!;
 const bottomTransitionSlidersEl = document.getElementById("bottom-transition-sliders")!;
 const copingSlidersEl = document.getElementById("coping-sliders")!;
+const skinSlidersEl = document.getElementById("skin-sliders")!;
+const skinGrainDirectionEl = document.getElementById("skin-grain-direction") as HTMLSelectElement;
 const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
 const resetViewBtn = document.getElementById("reset-view-btn")!;
@@ -107,7 +137,7 @@ const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
 const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
 const scaleToggle = document.getElementById("scale-toggle") as HTMLInputElement;
-const bottomTransitionToggle = document.getElementById("bottom-transition-toggle") as HTMLInputElement;
+const skinToggle = document.getElementById("skin-toggle") as HTMLInputElement;
 const themeToggle = document.getElementById("theme-toggle")!;
 const aboutBtn = document.getElementById("about-btn")!;
 const aboutCloseBtn = document.getElementById("about-close-btn")!;
@@ -152,12 +182,24 @@ const material = new THREE.MeshStandardMaterial({
   flatShading: true,
   side: THREE.DoubleSide, // ponytail: sidesteps verifying triangle winding on the hand-built ramp outlines
 });
-const rampGroup = new THREE.Group();
-scene.add(rampGroup);
+// Split so "Show skin" can hide the internal seam ribs (buried inside the skin) while leaving
+// the edge ribs (still visible, wrapped by the skin) visible either way.
+const edgeRibGroup = new THREE.Group();
+scene.add(edgeRibGroup);
+const internalRibGroup = new THREE.Group();
+scene.add(internalRibGroup);
+
+// Same material as the ribs (same stock) — always visible, not tied to "Show skin".
+const deckGroup = new THREE.Group();
+scene.add(deckGroup);
 
 const joistMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a876, flatShading: true }); // wood-toned, distinct from the ribs
-const joistGroup = new THREE.Group();
-scene.add(joistGroup);
+// Split so "Show skin" can hide the curve joists (under the surface a skin would cover) while
+// leaving the deck joists (flat deck/ground support) visible either way.
+const curveJoistGroup = new THREE.Group();
+scene.add(curveJoistGroup);
+const deckJoistGroup = new THREE.Group();
+scene.add(deckJoistGroup);
 
 const bottomTransitionGroup = new THREE.Group(); // same lumber as the joists, so reuses joistMaterial
 scene.add(bottomTransitionGroup);
@@ -165,6 +207,20 @@ scene.add(bottomTransitionGroup);
 const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.4 });
 const copingGroup = new THREE.Group();
 scene.add(copingGroup);
+
+// Each sheet gets its own shade of green (varied lightness, same hue) so individual sheets are
+// distinguishable — see buildHalfPipeSkinLayer1/rebuildRamp.
+const SKIN_HUE = 1 / 3; // green
+const skinGroup = new THREE.Group();
+skinGroup.visible = false;
+scene.add(skinGroup);
+
+// Layer 2 rendered wireframe in red, distinct from layer 1's solid green — so the two layers
+// (and how layer 2's seams stagger against layer 1's) stay visually distinguishable at once.
+const skinLayer2LineMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+const skinLayer2Group = new THREE.Group();
+skinLayer2Group.visible = false;
+scene.add(skinLayer2Group);
 
 /** A hollow tube (outer=odMm, inner=idMm), its length running along local Z, centered on all three axes. */
 function buildCopingTubeGeometry(idMm: number, odMm: number, spanWidth: number): THREE.BufferGeometry {
@@ -374,24 +430,54 @@ function renderSpaceStatus(): void {
 }
 
 function rebuildRamp(): void {
-  for (const child of rampGroup.children) {
+  for (const child of edgeRibGroup.children) {
     if (child instanceof THREE.Mesh) child.geometry.dispose();
   }
-  rampGroup.clear();
-  for (const geometry of RAMP.buildRibs(currentParams)) {
+  edgeRibGroup.clear();
+  for (const child of internalRibGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  internalRibGroup.clear();
+  const { edgeRibs, internalRibs } = RAMP.buildRibsBySection(currentParams);
+  for (const geometry of edgeRibs) {
     const rib = new THREE.Mesh(geometry, material);
     rib.castShadow = true;
-    rampGroup.add(rib);
+    edgeRibGroup.add(rib);
+  }
+  for (const geometry of internalRibs) {
+    const rib = new THREE.Mesh(geometry, material);
+    rib.castShadow = true;
+    internalRibGroup.add(rib);
   }
 
-  for (const child of joistGroup.children) {
+  for (const child of deckGroup.children) {
     if (child instanceof THREE.Mesh) child.geometry.dispose();
   }
-  joistGroup.clear();
-  for (const geometry of RAMP.buildJoists(currentParams)) {
+  deckGroup.clear();
+  for (const geometry of RAMP.buildDeck(currentParams)) {
+    const board = new THREE.Mesh(geometry, material);
+    board.castShadow = true;
+    deckGroup.add(board);
+  }
+
+  for (const child of curveJoistGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  curveJoistGroup.clear();
+  for (const child of deckJoistGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  deckJoistGroup.clear();
+  const { curveJoists, deckJoists } = RAMP.buildJoistsBySection(currentParams);
+  for (const geometry of curveJoists) {
     const joist = new THREE.Mesh(geometry, joistMaterial);
     joist.castShadow = true;
-    joistGroup.add(joist);
+    curveJoistGroup.add(joist);
+  }
+  for (const geometry of deckJoists) {
+    const joist = new THREE.Mesh(geometry, joistMaterial);
+    joist.castShadow = true;
+    deckJoistGroup.add(joist);
   }
 
   for (const child of bottomTransitionGroup.children) {
@@ -402,6 +488,40 @@ function rebuildRamp(): void {
     const member = new THREE.Mesh(geometry, joistMaterial);
     member.castShadow = true;
     bottomTransitionGroup.add(member);
+  }
+
+  for (const child of skinGroup.children) {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      (child.material as THREE.Material).dispose();
+    }
+  }
+  skinGroup.clear();
+  const skinSheets = RAMP.buildSkinLayer1(currentParams);
+  skinSheets.forEach((geometry, i) => {
+    const lightness = 0.25 + (0.5 * i) / Math.max(1, skinSheets.length - 1); // spreads shades across the whole set, not clustered
+    // side: DoubleSide — the left side's sheets are built by mirroring (geometry.scale(-1,1,1) in
+    // buildHalfPipeSkinLayer1), which flips winding without correcting it, same as the ribs (see
+    // `material` above); sidesteps verifying triangle winding on the mirrored geometry.
+    const skinMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(SKIN_HUE, 0.6, lightness),
+      flatShading: true,
+      side: THREE.DoubleSide,
+    });
+    const sheet = new THREE.Mesh(geometry, skinMaterial);
+    sheet.castShadow = true;
+    skinGroup.add(sheet);
+  });
+
+  for (const child of skinLayer2Group.children) {
+    if (child instanceof THREE.LineSegments) child.geometry.dispose();
+  }
+  skinLayer2Group.clear();
+  for (const geometry of RAMP.buildSkinLayer2(currentParams)) {
+    // Same high threshold angle as layer 1's own wireframe used, to drop the curve's own
+    // internal arc-facet seams and keep just each sheet's real silhouette.
+    const sheet = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), skinLayer2LineMaterial);
+    skinLayer2Group.add(sheet);
   }
 
   rebuildCoping(currentParams, currentParams.width);
@@ -457,16 +577,19 @@ function bindDiameterBound(source: HTMLInputElement, target: HTMLInputElement, b
 }
 
 function renderAllSliderGroups(): void {
-  // Every HalfPipeParams field is a number, just without a formal index signature — the
-  // slider list only reads/writes by key name, so this cast is a pure type-level widening,
-  // not a runtime lie (mutations below still land on the same currentParams object).
+  // Every HalfPipeParams field is a number except skinGrainDirection (a string enum, synced
+  // separately below) — the slider list only reads/writes by key name, so this cast is a pure
+  // type-level widening, not a runtime lie (mutations below still land on the same
+  // currentParams object).
   const state = currentParams as unknown as Record<string, number>;
   renderSliderList(ribSlidersEl, RAMP.ribSliders, state, rebuildRamp);
   renderSliderList(joistSlidersEl, RAMP.joistSliders, state, rebuildRamp);
   renderSliderList(bottomTransitionSlidersEl, RAMP.bottomTransitionSliders, state, rebuildRamp);
   renderSliderList(copingSlidersEl, RAMP.copingSliders, state, rebuildRamp);
+  renderSliderList(skinSlidersEl, RAMP.skinSliders, state, rebuildRamp);
   renderSliderList(rampSlidersEl, RAMP.rampSliders, state, rebuildRamp);
   renderSliderList(spaceSlidersEl, AVAILABLE_SPACE_SLIDERS, availableSpace, renderSpaceStatus);
+  skinGrainDirectionEl.value = currentParams.skinGrainDirection;
 
   const odInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingOdMm"]')!;
   const idInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingIdMm"]')!;
@@ -523,8 +646,19 @@ scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
 });
-bottomTransitionToggle.addEventListener("input", () => {
-  bottomTransitionGroup.visible = bottomTransitionToggle.checked;
+skinToggle.addEventListener("input", () => {
+  const showSkin = skinToggle.checked;
+  bottomTransitionGroup.visible = !showSkin;
+  curveJoistGroup.visible = !showSkin;
+  internalRibGroup.visible = !showSkin;
+  skinGroup.visible = showSkin;
+  skinLayer2Group.visible = showSkin;
+});
+skinGrainDirectionEl.addEventListener("change", () => {
+  history.record(snapshot());
+  currentParams.skinGrainDirection = skinGrainDirectionEl.value as SkinGrainDirection;
+  rebuildRamp();
+  updateHistoryButtons();
 });
 
 // Tooltip is position: fixed to escape #panel's overflow clipping, so its screen position has to be computed in JS rather than via CSS anchoring to an ancestor.

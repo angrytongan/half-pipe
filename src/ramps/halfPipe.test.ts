@@ -2,17 +2,24 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import {
   buildBottomTransitionFrame,
+  buildHalfPipeDeck,
   buildHalfPipeGeometry,
   buildHalfPipeJoists,
+  buildHalfPipeJoistsBySection,
   buildHalfPipeRibs,
+  buildHalfPipeRibsBySection,
+  buildHalfPipeSkinLayer1,
+  buildHalfPipeSkinLayer2,
   curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
   halfPipeFootprint,
   HALF_PIPE_DEFAULTS,
+  type HalfPipeParams,
 } from "./halfPipe";
 import { ribZPositions } from "./ribs";
 import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
+import { copingTouchExtension, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -135,6 +142,43 @@ describe("buildHalfPipeRibs", () => {
   });
 });
 
+describe("buildHalfPipeRibsBySection", () => {
+  it("splits the same ribs buildHalfPipeRibs returns into edgeRibs + internalRibs, with no overlap", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalRibCount: 2 };
+    const { edgeRibs, internalRibs } = buildHalfPipeRibsBySection(params);
+    expect(edgeRibs.length + internalRibs.length).toBe(buildHalfPipeRibs(params).length);
+  });
+
+  it("always puts exactly 2 ribs in edgeRibs, regardless of internalRibCount", () => {
+    expect(buildHalfPipeRibsBySection({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0 }).edgeRibs).toHaveLength(2);
+    expect(buildHalfPipeRibsBySection({ ...HALF_PIPE_DEFAULTS, internalRibCount: 5 }).edgeRibs).toHaveLength(2);
+  });
+
+  it("puts 2 ribs per seam in internalRibs", () => {
+    const { internalRibs } = buildHalfPipeRibsBySection({ ...HALF_PIPE_DEFAULTS, internalRibCount: 3 });
+    expect(internalRibs).toHaveLength(6);
+  });
+
+  it("edgeRibs sit at the outermost Z positions, internalRibs at the rest", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalRibCount: 2, width: 3.7 };
+    const positions = ribZPositions(params.width, params.internalRibCount, params.ribThicknessMm / 1000);
+    const { edgeRibs, internalRibs } = buildHalfPipeRibsBySection(params);
+
+    const zOf = (rib: THREE.BufferGeometry): number => {
+      rib.computeBoundingBox();
+      const box = rib.boundingBox!;
+      return (box.min.z + box.max.z) / 2;
+    };
+    const expectedEdgeZs = [positions[0], positions[positions.length - 1]].sort((a, b) => a - b);
+    const actualEdgeZs = edgeRibs.map(zOf).sort((a, b) => a - b);
+    actualEdgeZs.forEach((z, i) => expect(z).toBeCloseTo(expectedEdgeZs[i], 5));
+
+    const expectedInternalZs = positions.slice(1, -1).sort((a, b) => a - b);
+    const actualInternalZs = internalRibs.map(zOf).sort((a, b) => a - b);
+    actualInternalZs.forEach((z, i) => expect(z).toBeCloseTo(expectedInternalZs[i], 5));
+  });
+});
+
 describe("buildHalfPipeRibs coping notch", () => {
   it("cuts the notch into the rib outline instead of meeting at a sharp deck/curve corner", () => {
     const params = HALF_PIPE_DEFAULTS;
@@ -147,6 +191,8 @@ describe("buildHalfPipeRibs coping notch", () => {
       params.copingOdMm / 1000 / 2,
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const wallBottomWorld = { x: half + notch.wallBottom[0], y: notch.wallBottom[1] + jointDepth };
     const shelfEndWorld = { x: half + notch.shelfEnd[0], y: notch.shelfEnd[1] + jointDepth };
@@ -232,7 +278,7 @@ describe("buildBottomTransitionFrame", () => {
 describe("buildHalfPipeJoists", () => {
   it("produces the expected number of joists at defaults", () => {
     const { internalRibCount, internalCurveJoistCount } = HALF_PIPE_DEFAULTS;
-    const pointsPerSide = internalCurveJoistCount + 5; // bottom corner, curve interior, notch-shelf, floor-section end, ground below floor-section end, ground midpoint
+    const pointsPerSide = internalCurveJoistCount + 6; // bottom corner, curve interior, notch-shelf, floor-section end, notch-wall (deck-inner), ground below floor-section end, ground midpoint
     const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
     const sections = internalRibCount + 1;
 
@@ -253,10 +299,10 @@ describe("buildHalfPipeJoists", () => {
     expect(more.length - base.length).toBe(2 * sections); // both sides
   });
 
-  it("still builds only the bottom-corner, notch-shelf, deck-outer, ground-below-deck-outer, and ground-midpoint landmarks when internalCurveJoistCount is 0", () => {
+  it("still builds only the bottom-corner, notch-shelf, deck-outer, deck-inner, ground-below-deck-outer, and ground-midpoint landmarks when internalCurveJoistCount is 0", () => {
     const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 };
     const sections = params.internalRibCount + 1;
-    const pointsPerSide = 5; // bottom corner, notch-shelf, floor-section end, ground below it, ground midpoint — no curve interior
+    const pointsPerSide = 6; // bottom corner, notch-shelf, floor-section end, notch-wall (deck-inner), ground below it, ground midpoint — no curve interior
     expect(buildHalfPipeJoists(params)).toHaveLength(2 * pointsPerSide * sections);
   });
 
@@ -314,6 +360,8 @@ describe("buildHalfPipeJoists", () => {
       params.copingOdMm / 1000 / 2,
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const edgeAngle = thickness / 2 / params.radius;
     const curveStartAngle = edgeAngle;
@@ -363,6 +411,8 @@ describe("buildHalfPipeJoists", () => {
       params.copingOdMm / 1000 / 2,
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const edgeAngle = thickness / 2 / params.radius;
     const curveStartAngle = edgeAngle; // bottom-most joist's inside edge
@@ -413,6 +463,8 @@ describe("buildHalfPipeJoists", () => {
       params.copingOdMm / 1000 / 2,
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const angle = notch.shelfAngle;
     // Inset backward along the tangent by half the thickness — see buildHalfPipeJoists — so the
@@ -457,6 +509,8 @@ describe("buildHalfPipeJoists", () => {
       params.copingOdMm / 1000 / 2,
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const [shelfX, shelfY] = notch.shelfEnd;
     const worldY = shelfY + jointDepth;
@@ -581,6 +635,402 @@ describe("buildHalfPipeJoists", () => {
   });
 });
 
+describe("buildHalfPipeJoistsBySection", () => {
+  it("splits the same joists buildHalfPipeJoists returns into curveJoists + deckJoists, with no overlap", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const { curveJoists, deckJoists } = buildHalfPipeJoistsBySection(params);
+    expect(curveJoists.length + deckJoists.length).toBe(buildHalfPipeJoists(params).length);
+  });
+
+  it("puts exactly the bottom-corner, curve-interior, and notch-shelf landmarks (both sides, per section) in curveJoists", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 3 };
+    const sections = params.internalRibCount + 1;
+    const pointsPerSide = params.internalCurveJoistCount + 2; // bottom corner, curve interior, notch-shelf
+    const { curveJoists } = buildHalfPipeJoistsBySection(params);
+    expect(curveJoists).toHaveLength(2 * pointsPerSide * sections);
+  });
+
+  it("puts exactly the deck-outer, deck-inner, ground-below-deck-outer, and ground-midpoint landmarks (both sides, per section) in deckJoists, unaffected by internalCurveJoistCount", () => {
+    const fewer = buildHalfPipeJoistsBySection({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 }).deckJoists;
+    const more = buildHalfPipeJoistsBySection({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 5 }).deckJoists;
+    const sections = HALF_PIPE_DEFAULTS.internalRibCount + 1;
+    const pointsPerSide = 4; // deck-outer, deck-inner, ground-below-deck-outer, ground-midpoint
+    expect(fewer).toHaveLength(2 * pointsPerSide * sections);
+    expect(more).toHaveLength(2 * pointsPerSide * sections);
+  });
+
+  it("anchors the deck-inner joist's notch-side face flush against the notch's plumb wall", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const thickness = params.joistThicknessMm / 1000;
+    const jointDepth = params.joistDepthMm / 1000;
+    const half = params.bottomTransitionLength / 2;
+
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+    const [wallX, wallY] = notch.wallTop;
+    const wallWorldY = wallY + jointDepth;
+
+    // Flat (angle 0), so its notch-side face is a vertical plane at box.min.x (right) / box.max.x
+    // (left) — outward-inset (the opposite of deck-outer), so the joist's body sits past the
+    // wall, toward the deck's outer edge, with only that one face flush against it.
+    const { deckJoists } = buildHalfPipeJoistsBySection(params);
+    const candidates = deckJoists.filter((joist) => {
+      joist.computeBoundingBox();
+      return Math.abs(joist.boundingBox!.max.y - wallWorldY) < 1e-6; // flat, deck-height joists — deck-outer and deck-inner both qualify
+    });
+
+    const rightJoist = candidates.find((joist) => Math.abs(joist.boundingBox!.min.x - (half + wallX)) < 1e-6);
+    const leftJoist = candidates.find((joist) => Math.abs(joist.boundingBox!.max.x - (-half - wallX)) < 1e-6);
+    expect(rightJoist).toBeDefined();
+    expect(leftJoist).toBeDefined();
+    expect(rightJoist!.boundingBox!.max.x - rightJoist!.boundingBox!.min.x).toBeCloseTo(thickness, 6);
+    expect(leftJoist!.boundingBox!.max.x - leftJoist!.boundingBox!.min.x).toBeCloseTo(thickness, 6);
+  });
+});
+
+describe("buildHalfPipeDeck", () => {
+  it("returns one board per side", () => {
+    expect(buildHalfPipeDeck(HALF_PIPE_DEFAULTS)).toHaveLength(2);
+  });
+
+  it("spans the full width in Z, flush with the edge ribs' outer faces — not inset between them like a joist", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, width: 3.7 };
+    for (const board of buildHalfPipeDeck(params)) {
+      board.computeBoundingBox();
+      const box = board.boundingBox!;
+      expect(box.max.z - box.min.z).toBeCloseTo(params.width, 5);
+      expect(box.min.z).toBeCloseTo(-params.width / 2, 5);
+      expect(box.max.z).toBeCloseTo(params.width / 2, 5);
+    }
+  });
+
+  it("runs in X from the notch's vertical wall to the rib's own outer edge, on both sides", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const deckOuter = points[points.length - 1];
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+    const [wallX] = notch.wallTop;
+
+    const boards = buildHalfPipeDeck(params);
+    const rightBoard = boards.find((board) => {
+      board.computeBoundingBox();
+      return (board.boundingBox!.min.x + board.boundingBox!.max.x) / 2 > 0;
+    })!;
+    const leftBoard = boards.find((board) => {
+      board.computeBoundingBox();
+      return (board.boundingBox!.min.x + board.boundingBox!.max.x) / 2 < 0;
+    })!;
+
+    expect(rightBoard.boundingBox!.min.x).toBeCloseTo(half + wallX, 5);
+    expect(rightBoard.boundingBox!.max.x).toBeCloseTo(half + deckOuter[0], 5);
+    expect(leftBoard.boundingBox!.max.x).toBeCloseTo(-(half + wallX), 5);
+    expect(leftBoard.boundingBox!.min.x).toBeCloseTo(-(half + deckOuter[0]), 5);
+  });
+
+  it("sits on top of the deck joists: bottom flush with their top face, extending upward by ribThicknessMm", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, ribThicknessMm: 25 };
+    const jointDepth = params.joistDepthMm / 1000;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const deckOuter = points[points.length - 1];
+    const deckJoistTopY = deckOuter[1] + jointDepth;
+
+    for (const board of buildHalfPipeDeck(params)) {
+      board.computeBoundingBox();
+      const box = board.boundingBox!;
+      expect(box.min.y).toBeCloseTo(deckJoistTopY, 6);
+      expect(box.max.y - box.min.y).toBeCloseTo(0.025, 6);
+    }
+  });
+});
+
+describe("buildHalfPipeSkinLayer1", () => {
+  const notchOf = (params: HalfPipeParams) => {
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    return copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+  };
+
+  /** The last (ground-most) row's own t0/t1/flatExtension, replaying buildHalfPipeSkinLayer1's own row formula. */
+  const groundRowOf = (params: HalfPipeParams) => {
+    const sweep = notchOf(params).shelfAngle;
+    const rowCount = Math.ceil((params.radius * sweep) / params.skinSheetWidth);
+    const t1 = Math.max(sweep - ((rowCount - 1) * params.skinSheetWidth) / params.radius, 0);
+    const t0 = Math.max(sweep - (rowCount * params.skinSheetWidth) / params.radius, 0);
+    const flatExtension = Math.max(params.skinSheetWidth - params.radius * (t1 - t0), 0);
+    return { t0, t1, flatExtension };
+  };
+
+  /** Whichever flat-sheet orientation needs fewer sheets, replaying buildHalfPipeSkinLayer1's own comparison. */
+  const flatLayoutOf = (params: HalfPipeParams) => {
+    const reducedHalf = params.bottomTransitionLength / 2 - groundRowOf(params).flatExtension;
+    const longEdgeAlongX = { xSegments: tileCenteredClipped(reducedHalf, params.skinSheetLength), zRows: tileFromEdgeClipped(params.width / 2, params.skinSheetWidth) };
+    const longEdgeAlongZ = { xSegments: tileCenteredClipped(reducedHalf, params.skinSheetWidth), zRows: tileFromEdgeClipped(params.width / 2, params.skinSheetLength) };
+    const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
+    return countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  };
+
+  it("returns curve sheets (2 sides x rows x Z columns, cut off at the notch's shelfAngle) plus flat sheets filling in whatever the curve rows' own flatExtension doesn't reach", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sweep = notchOf(params).shelfAngle;
+    const rowCount = Math.ceil((params.radius * sweep) / params.skinSheetWidth);
+    const curveZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
+    const { xSegments: flatXSegments, zRows: flatZRows } = flatLayoutOf(params);
+    const expectedCount = 2 * rowCount * curveZColumns.length + flatXSegments.length * flatZRows.length;
+    expect(buildHalfPipeSkinLayer1(params)).toHaveLength(expectedCount);
+  });
+
+  it("picks whichever flat-sheet orientation needs fewer sheets, not a fixed long-edge direction", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const { zRows } = flatLayoutOf(params);
+    // for the defaults, tiling the flat region in skinSheetLength-wide Z rows takes fewer
+    // sheets than skinSheetWidth-wide ones would — confirms the comparison actually picked
+    // the long-edge-along-Z orientation here, not just defaulted to long-edge-along-X
+    expect(zRows.every(([s, e]) => e - s <= params.skinSheetLength + 1e-9)).toBe(true);
+    expect(Math.max(...zRows.map(([s, e]) => e - s))).toBeCloseTo(params.skinSheetLength, 5);
+  });
+
+  it("gives every curve sheet a Z-span matching its own column width, and every flat sheet a Z-span matching its own row width", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const curveSpans = tileFromEdgeClipped(params.width / 2, params.skinSheetLength).map(([s, e]) => e - s);
+    const flatSpans = flatLayoutOf(params).zRows.map(([s, e]) => e - s);
+
+    for (const geometry of buildHalfPipeSkinLayer1(params)) {
+      geometry.computeBoundingBox();
+      const span = geometry.boundingBox!.max.z - geometry.boundingBox!.min.z;
+      const expectedSpans = geometry.type === "BoxGeometry" ? flatSpans : curveSpans;
+      expect(expectedSpans.some((s) => Math.abs(s - span) < 1e-5)).toBe(true);
+    }
+  });
+
+  it("butts the flat sheets flush against the curve rows' own flatExtension — no gap, no overlap", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const { flatExtension } = groundRowOf(params);
+    expect(flatExtension).toBeGreaterThan(0); // defaults don't divide the curve evenly — exercise the real case
+
+    const sheets = buildHalfPipeSkinLayer1(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const flatSheets = sheets.filter((g) => g.type === "BoxGeometry");
+    const maxFlatX = Math.max(...flatSheets.map((g) => g.boundingBox!.max.x));
+    const minFlatX = Math.min(...flatSheets.map((g) => g.boundingBox!.min.x));
+    expect(maxFlatX).toBeCloseTo(half - flatExtension, 5);
+    expect(minFlatX).toBeCloseTo(-(half - flatExtension), 5);
+  });
+
+  it("puts a full skinSheetWidth sheet at the notch — reaches it exactly, not a cut sheet", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const notch = notchOf(params);
+    const shelfWorldX = half + params.radius * Math.sin(notch.shelfAngle);
+
+    const sheets = buildHalfPipeSkinLayer1(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const rightSheets = sheets.filter((g) => (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2 > 0);
+
+    const maxRightX = Math.max(...rightSheets.map((g) => g.boundingBox!.max.x));
+    expect(maxRightX).toBeCloseTo(shelfWorldX, 4);
+  });
+
+  it("continues the ground row's own leftover flat onto the bottom transition, instead of stopping cut at the seam", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+    const { flatExtension } = groundRowOf(params);
+    expect(flatExtension).toBeGreaterThan(0); // defaults don't divide the curve evenly — exercise the real case
+
+    const sheets = buildHalfPipeSkinLayer1(params);
+    const rightSheets = sheets.filter((geometry) => {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      return (box.min.x + box.max.x) / 2 > 0;
+    });
+    const minX = Math.min(...rightSheets.map((g) => g.boundingBox!.min.x));
+    const minY = Math.min(...rightSheets.map((g) => g.boundingBox!.min.y));
+    expect(minX).toBeCloseTo(half - flatExtension, 5); // past the seam, into the trough — not flush at it
+    expect(minY).toBeCloseTo(jointDepth, 5); // same height as the rest of the sheet, just flat now
+  });
+
+  it("mirrors left/right about X=0", () => {
+    const sheets = buildHalfPipeSkinLayer1(HALF_PIPE_DEFAULTS);
+    const xExtents = sheets.map((geometry) => {
+      geometry.computeBoundingBox();
+      return (geometry.boundingBox!.min.x + geometry.boundingBox!.max.x) / 2;
+    });
+    const right = xExtents.filter((x) => x > 0);
+    const left = xExtents.filter((x) => x < 0);
+    expect(right).toHaveLength(left.length);
+  });
+
+  it("tiles Z columns starting at -width/2", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sheets = buildHalfPipeSkinLayer1(params);
+    const minZ = Math.min(
+      ...sheets.map((geometry) => {
+        geometry.computeBoundingBox();
+        return geometry.boundingBox!.min.z;
+      }),
+    );
+    expect(minZ).toBeCloseTo(-params.width / 2, 5);
+  });
+});
+
+describe("buildHalfPipeSkinLayer2", () => {
+  const notchOf = (params: HalfPipeParams) => {
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    return copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+  };
+
+  it("staggers its seams to the midpoint of layer 1's sheets, when both share the same sheet width (the default)", () => {
+    // small sheets relative to the sweep, so most rows are full-width, not the one ground row
+    // whose own real extent is clamped short — its "midpoint" isn't the nominal one, see below
+    const params = { ...HALF_PIPE_DEFAULTS, skinSheetWidth: 0.3, skinLayer2SheetWidth: 0.3 };
+    const sweep = notchOf(params).shelfAngle;
+    const layer1Rows = curveSheetRows(params.radius, sweep, params.skinSheetWidth, params.skinSheetWidth);
+    const layer2Rows = curveSheetRows(params.radius, sweep, params.skinLayer2SheetWidth, params.skinLayer2SheetWidth / 2);
+
+    let checkedAtLeastOne = false;
+    for (let i = 0; i < layer1Rows.length - 1; i++) {
+      const seam = layer1Rows[i].t0; // == layer1Rows[i + 1].t1
+      const containingRow = layer2Rows.find((r) => seam <= r.t1 + 1e-9 && seam >= r.t0 - 1e-9);
+      expect(containingRow).toBeDefined();
+      if (containingRow!.flatExtension > 0) continue; // the ground row's own extent is clamped by the ground, not the nominal width — its midpoint isn't meaningful here
+      expect(seam).toBeCloseTo((containingRow!.t0 + containingRow!.t1) / 2, 5);
+      checkedAtLeastOne = true;
+    }
+    expect(checkedAtLeastOne).toBe(true);
+  });
+
+  it("makes the topmost sheet's inner (rideable) edge actually reach the coping pipe's surface", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const notch = notchOf(params);
+    const pipeRadius = params.copingOdMm / 1000 / 2;
+
+    const sheets = buildHalfPipeSkinLayer2(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const rightSheets = sheets.filter((g) => g.type === "ExtrudeGeometry" && (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2 > 0);
+    // the topmost sheet is whichever right-side curve sheet reaches furthest toward the notch
+    const topSheet = rightSheets.reduce((a, b) => (a.boundingBox!.max.x > b.boundingBox!.max.x ? a : b));
+
+    const jointDepth = params.joistDepthMm / 1000;
+    const position = topSheet.attributes.position;
+    const distances: number[] = [];
+    const [pcx, pcy] = notch.pipeCenter;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i) - half;
+      const y = position.getY(i) - jointDepth;
+      distances.push(Math.sqrt((x - pcx) ** 2 + (y - pcy) ** 2));
+    }
+    // some vertex of the extended tip lands exactly on the pipe's own surface
+    expect(Math.min(...distances)).toBeCloseTo(pipeRadius, 4);
+  });
+
+  it("sits on top of layer 1, not the bare curve — offset by skinLayer1ThicknessMm in world Y", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+    const outerOffset = params.skinLayer1ThicknessMm / 1000;
+
+    const sheets = buildHalfPipeSkinLayer2(params);
+    const rightSheets = sheets.filter((geometry) => {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      return (box.min.x + box.max.x) / 2 > 0;
+    });
+    const minX = Math.min(...rightSheets.map((g) => g.boundingBox!.min.x));
+    const minY = Math.min(...rightSheets.map((g) => g.boundingBox!.min.y));
+    expect(minX).toBeLessThanOrEqual(half); // the ground row's own leftover still reaches onto the bottom transition
+    expect(minY).toBeCloseTo(jointDepth + outerOffset, 5);
+  });
+
+  it("also fills in flat coverage on the bottom transition, using its own sheet size", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sheets = buildHalfPipeSkinLayer2(params);
+    expect(sheets.some((g) => g.type === "BoxGeometry")).toBe(true);
+  });
+
+  it("uses its own independent sheet dimensions, not layer 1's", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, skinLayer2SheetWidth: 0.6, skinLayer2SheetLength: 1.2 };
+    const sweep = notchOf(params).shelfAngle;
+    const layer2RowsCustom = curveSheetRows(params.radius, sweep, params.skinLayer2SheetWidth, params.skinLayer2SheetWidth / 2);
+    const layer2RowsDefault = curveSheetRows(params.radius, sweep, HALF_PIPE_DEFAULTS.skinLayer2SheetWidth, HALF_PIPE_DEFAULTS.skinLayer2SheetWidth / 2);
+    expect(layer2RowsCustom.length).not.toBe(layer2RowsDefault.length);
+
+    const sheetsCustom = buildHalfPipeSkinLayer2(params);
+    const sheetsDefault = buildHalfPipeSkinLayer1(HALF_PIPE_DEFAULTS);
+    expect(sheetsCustom.length).not.toBe(sheetsDefault.length);
+  });
+
+  it("mirrors left/right about X=0", () => {
+    const sheets = buildHalfPipeSkinLayer2(HALF_PIPE_DEFAULTS);
+    const xExtents = sheets.map((geometry) => {
+      geometry.computeBoundingBox();
+      return (geometry.boundingBox!.min.x + geometry.boundingBox!.max.x) / 2;
+    });
+    const right = xExtents.filter((x) => x > 0);
+    const left = xExtents.filter((x) => x < 0);
+    expect(right).toHaveLength(left.length);
+  });
+});
+
+describe("copingTouchExtension usage sanity", () => {
+  it("gives layer 2's outer and inner edges their own (different) extension toward the coping pipe", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+    const outerOffset = params.skinLayer1ThicknessMm / 1000;
+    const thickness = params.skinLayer2ThicknessMm / 1000;
+    const pipeRadius = params.copingOdMm / 1000 / 2;
+    const rOuter = params.radius - outerOffset;
+    const rInner = params.radius - outerOffset - thickness;
+    const outerExtension = copingTouchExtension(params.radius, rOuter, notch.shelfAngle, notch.pipeCenter, pipeRadius);
+    const innerExtension = copingTouchExtension(params.radius, rInner, notch.shelfAngle, notch.pipeCenter, pipeRadius);
+    expect(innerExtension).toBeGreaterThan(0);
+    expect(outerExtension).toBeGreaterThan(0);
+    expect(outerExtension).not.toBeCloseTo(innerExtension, 5); // confirms they're genuinely computed separately, not the same value reused
+  });
+});
+
 describe("curveInteriorJoistLocalPoints", () => {
   it("matches the curve-interior joist positions buildHalfPipeJoists actually builds", () => {
     const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 5 };
@@ -636,6 +1086,8 @@ describe("halfPipeCopingCenters", () => {
       params.copingOdMm / 1000 / 2,
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const [cx, cy] = notch.pipeCenter;
     const expectedY = cy + jointDepth;
@@ -690,5 +1142,18 @@ describe("halfPipeFootprint", () => {
 
     expect(longer.length - base.length).toBeCloseTo(2, 5);
     expect(wider.width - base.width).toBeCloseTo(1, 5);
+  });
+});
+
+describe("HALF_PIPE_DEFAULTS skin", () => {
+  it("defaults both skin layers to 12mm", () => {
+    expect(HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm).toBe(12);
+    expect(HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm).toBe(12);
+  });
+
+  it("defaults the sheet size to 2.4m x 1.2m, length-ways", () => {
+    expect(HALF_PIPE_DEFAULTS.skinSheetLength).toBe(2.4);
+    expect(HALF_PIPE_DEFAULTS.skinSheetWidth).toBe(1.2);
+    expect(HALF_PIPE_DEFAULTS.skinGrainDirection).toBe("length-ways");
   });
 });

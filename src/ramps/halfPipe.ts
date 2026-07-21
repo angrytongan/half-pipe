@@ -4,6 +4,17 @@ import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
+import { buildSkinCurveSheet, buildSkinFlatSheet, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+
+/**
+ * Which way a plywood sheet is laid relative to the ribs it skins: "length-ways" runs the
+ * sheet's major (length) axis perpendicular to the ribs, so it must bend across its minor
+ * (width) axis to follow the curve; "width-ways" runs the minor axis parallel to the ribs
+ * instead, bending across the major axis. Plywood bends far more easily across the grain
+ * than along it, so this determines whether a given sheet size can follow the transition
+ * radius at all — not yet used by any geometry, controls-only for now.
+ */
+export type SkinGrainDirection = "length-ways" | "width-ways";
 
 export interface HalfPipeParams {
   radius: number;
@@ -22,6 +33,13 @@ export interface HalfPipeParams {
   copingOdMm: number;
   copingHorizontalProtrusionMm: number;
   copingVerticalProtrusionMm: number;
+  skinLayer1ThicknessMm: number;
+  skinLayer2ThicknessMm: number;
+  skinSheetLength: number;
+  skinSheetWidth: number;
+  skinLayer2SheetLength: number;
+  skinLayer2SheetWidth: number;
+  skinGrainDirection: SkinGrainDirection;
 }
 
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
@@ -41,6 +59,13 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   copingOdMm: 60.3,
   copingHorizontalProtrusionMm: 3.2,
   copingVerticalProtrusionMm: 6.4,
+  skinLayer1ThicknessMm: 12,
+  skinLayer2ThicknessMm: 12,
+  skinSheetLength: 2.4,
+  skinSheetWidth: 1.2,
+  skinLayer2SheetLength: 2.4,
+  skinLayer2SheetWidth: 1.2,
+  skinGrainDirection: "length-ways",
 };
 
 /**
@@ -63,11 +88,14 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
     vertHeight,
     deckLength,
     bottomTransitionLength,
+    ribThicknessMm,
     joistDepthMm,
     joistThicknessMm,
     copingOdMm,
     copingHorizontalProtrusionMm,
     copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
   } = params;
   const jointDepth = joistDepthMm / 1000;
   const half = bottomTransitionLength / 2;
@@ -79,6 +107,8 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
 
   const mapWith = (mirrorX: (x: number) => number) => ([x, y]: [number, number]): [number, number] => [mirrorX(x), y + jointDepth];
@@ -125,6 +155,23 @@ export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[
   const shape = halfPipeOutline(params);
   const ribThickness = params.ribThicknessMm / 1000;
   return extrudeRibs(shape, ribZPositions(params.width, params.internalRibCount, ribThickness), ribThickness);
+}
+
+/**
+ * Same ribs as `buildHalfPipeRibs`, split into the two mandatory edge ribs (frame the deck
+ * edges — still visible once skinned, since the skin wraps around them) and the
+ * `internalRibCount`-driven seam ribs (buried inside the skin, hidden by the "Show skin"
+ * toggle). `ribZPositions` always returns edge-then-internal-then-edge, so the first and last
+ * entries are the edges and everything between is internal.
+ */
+export function buildHalfPipeRibsBySection(params: HalfPipeParams): { edgeRibs: THREE.BufferGeometry[]; internalRibs: THREE.BufferGeometry[] } {
+  const shape = halfPipeOutline(params);
+  const ribThickness = params.ribThicknessMm / 1000;
+  const positions = ribZPositions(params.width, params.internalRibCount, ribThickness);
+  return {
+    edgeRibs: extrudeRibs(shape, [positions[0], positions[positions.length - 1]], ribThickness),
+    internalRibs: extrudeRibs(shape, positions.slice(1, -1), ribThickness),
+  };
 }
 
 /**
@@ -182,7 +229,20 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
  * from the same geometry instead of re-deriving this angle math.
  */
 export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: [number, number]; angle: number }[] {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, joistThicknessMm, internalCurveJoistCount, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm } = params;
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    ribThicknessMm,
+    joistThicknessMm,
+    internalCurveJoistCount,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
+  } = params;
   const thickness = joistThicknessMm / 1000;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const notch = copingNotch(
@@ -191,6 +251,8 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
   const edgeAngle = thickness / 2 / radius;
   const curveStartAngle = edgeAngle;
@@ -221,7 +283,13 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
  * uses, so the two land exactly flush, one stacked on the other. A third ground-level joist sits
  * at the centerline midpoint (by X) between the bottom-corner and deck-outer-ground joists — the
  * rib's own ground-level base is a flat line the whole way between those two, so this one is
- * flat and uninset too, just centered rather than flush to an edge. No
+ * flat and uninset too, just centered rather than flush to an edge. A fourth deck-level joist
+ * sits at the deck's *inner* edge, where `copingNotch`'s plumb wall cuts into it —
+ * `notch.wallTop` is already the point where that cut meets the flat deck, so it's used
+ * directly. Flat like the deck-outer joist, but inset the *opposite* way (outward, by
+ * `thickness / 2`) since the deck material here starts at the wall and runs outward from it,
+ * the mirror image of the deck-outer landmark's own edge — so it's this joist's notch-side face,
+ * not its center, that butts flush against the wall. No
  * joist at the deck/curve corner itself (deck start) — tilted to the curve's own tangent there
  * (as steep as `transitionAngleDeg`) while anchored exactly where the flat deck begins, its top
  * face would rise above the deck surface on the deck side of its own centerline, physically
@@ -243,6 +311,19 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
  * screwed together directly).
  */
 export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { curveJoists, deckJoists } = buildHalfPipeJoistsBySection(params);
+  return [...curveJoists, ...deckJoists];
+}
+
+/**
+ * Same joists as `buildHalfPipeJoists`, split by landmark instead of returned flat — curve
+ * joists (bottom corner, `internalCurveJoistCount` interior points, notch-shelf) are the ones
+ * under the curved/vert surface a skin would actually cover; deck joists (deck-outer, deck-inner
+ * at the notch's plumb wall, ground-below-deck-outer, ground-midpoint) support the flat
+ * deck/ground and stay put either way. Lets `main.ts` hide the former under the "Show skin"
+ * toggle while leaving the latter visible.
+ */
+export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] } {
   const {
     radius,
     transitionAngleDeg,
@@ -257,6 +338,8 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
     copingOdMm,
     copingHorizontalProtrusionMm,
     copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
   } = params;
   const half = bottomTransitionLength / 2;
   const jointDepth = joistDepthMm / 1000;
@@ -272,6 +355,8 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
 
   const curveInterior = curveInteriorJoistLocalPoints(params);
@@ -300,38 +385,323 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   // two, so no tilt is needed here either.
   const groundMidpoint: [number, number] = [deckOuter[0] / 2, 0];
 
-  // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
-  // rising through the curve, tilted again at the notch's shelf point, flat on the deck floor
-  // (0) — see transitionAndDeckPoints for why deckOuter's own point differs from the curve's
-  // own endpoint (deck start, omitted) — and flat again at ground level, both directly beneath
-  // it and at the midpoint between it and the bottom corner.
-  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter, deckGroundPoint, groundMidpoint];
-  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0, 0, 0];
+  // Tangent angle at each landmark: flat at the bottom corner, rising through the curve, tilted
+  // again at the notch's shelf point (all three "curve" — under the curved/vert surface), then
+  // flat on the deck floor (0) — see transitionAndDeckPoints for why deckOuter's own point
+  // differs from the curve's own endpoint (deck start, omitted) — and flat again at ground
+  // level, both directly beneath it and at the midpoint between it and the bottom corner (all
+  // three "deck" — under the flat deck/ground).
+  const curveLocalPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint];
+  const curveLocalAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle];
+  const curveInwardInset: number[] = [0, ...curveInteriorPoints.map(() => 0), 0];
+
+  // The deck's inner edge, where the notch's plumb wall cuts into it — `notch.wallTop` is
+  // already the point where that vertical cut meets the flat deck. Flat (angle 0) like every
+  // other deck landmark, but inset *outward* (the opposite sign from deck-outer, below) by half
+  // the joist's own thickness, so its face on the notch side — not its center — butts flush
+  // against the wall instead of straddling it. The deck material itself starts at the wall and
+  // runs outward from there (the notch cuts away everything on the curve side of it), the
+  // mirror image of the deck-outer landmark's own edge convention.
+  const deckInnerPoint: [number, number] = notch.wallTop;
+
+  const deckLocalPoints: [number, number][] = [deckOuter, deckInnerPoint, deckGroundPoint, groundMidpoint];
+  const deckLocalAngles: number[] = [0, 0, 0, 0];
   // The deck-outer landmark and the ground joist beneath it are both the ramp's own outer edge,
   // where the rib's outline ends flush (no inset) — so those two alone are inset inward by half
   // their own thickness, aligning their external face with the rib's edge instead of centering
-  // the joist on it and sticking half its thickness out past where the rib actually ends. Using
-  // the same inset for both lands them flush, one exactly above the other. The other landmarks,
-  // including the new ground midpoint, sit inside the rib's own material, so they're centered
-  // on their own anchor with no inset.
-  const inwardInset: number[] = [0, ...curveInteriorPoints.map(() => 0), 0, thickness / 2, thickness / 2, 0];
-  const worldJoists: { x: number; y: number; angle: number }[] = [
+  // the joist on it and sticking half its thickness out past where the rib actually ends. The
+  // ground-midpoint landmark sits inside the rib's own material, so it's centered on its own
+  // anchor with no inset. deckInnerPoint uses the opposite sign — see its own comment above.
+  const deckInwardInset: number[] = [thickness / 2, -thickness / 2, thickness / 2, 0];
+
+  const toWorldJoists = (localPoints: [number, number][], localAngles: number[], inwardInset: number[]): { x: number; y: number; angle: number }[] => [
     ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
     ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),
   ];
 
   const ribZs = ribZPositions(width, internalRibCount, ribThickness);
-  const joists: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < ribZs.length; i += 2) {
-    // ribZs are rib centerlines — the joist is built to butt against each rib's inside face,
-    // not its centerline, so it spans the actual bay, not the centerline-to-centerline gap.
-    const zStart = ribZs[i] + ribThickness / 2;
-    const zEnd = ribZs[i + 1] - ribThickness / 2;
-    for (const { x, y, angle } of worldJoists) {
-      joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth, angle));
+  const buildJoistsAt = (worldJoists: { x: number; y: number; angle: number }[]): THREE.BufferGeometry[] => {
+    const joists: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < ribZs.length; i += 2) {
+      // ribZs are rib centerlines — the joist is built to butt against each rib's inside face,
+      // not its centerline, so it spans the actual bay, not the centerline-to-centerline gap.
+      const zStart = ribZs[i] + ribThickness / 2;
+      const zEnd = ribZs[i + 1] - ribThickness / 2;
+      for (const { x, y, angle } of worldJoists) {
+        joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth, angle));
+      }
+    }
+    return joists;
+  };
+
+  return {
+    curveJoists: buildJoistsAt(toWorldJoists(curveLocalPoints, curveLocalAngles, curveInwardInset)),
+    deckJoists: buildJoistsAt(toWorldJoists(deckLocalPoints, deckLocalAngles, deckInwardInset)),
+  };
+}
+
+/**
+ * The deck itself — one flat board per side, the same material as the ribs (`ribThicknessMm`).
+ * Runs in X from the notch's vertical wall (`notch.wallTop`, the same point the deck-inner
+ * joist anchors to — see `buildHalfPipeJoistsBySection`) out to the rib's own outer edge
+ * (`deckOuter`, the ramp's rear). Spans the full `width` in Z — flush with the edge ribs'
+ * *outer* faces, so it sits over them (unlike a joist, which insets to their *inside* faces and
+ * stops between them). Sits on top of the deck joists: its bottom face is flush with their top
+ * face (the rib's own drawn deck line), extending upward by its own thickness — so its top
+ * surface ends up `ribThicknessMm` above that line, since the line itself is only a stand-in for
+ * the finished surface height and hasn't been repositioned yet (see features.md).
+ */
+export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    width,
+    ribThicknessMm,
+    joistDepthMm,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
+  } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000;
+  const ribThickness = ribThicknessMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const deckOuter = points[points.length - 1];
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
+  );
+  const [wallX] = notch.wallTop;
+  const deckTopOfJoistsY = deckOuter[1] + jointDepth; // the deck joists' own top face / the rib's own drawn deck line
+
+  const board = (mirrorX: (x: number) => number): THREE.BufferGeometry => {
+    const xStart = mirrorX(wallX);
+    const xEnd = mirrorX(deckOuter[0]);
+    const geometry = new THREE.BoxGeometry(Math.abs(xEnd - xStart), ribThickness, width);
+    geometry.translate((xStart + xEnd) / 2, deckTopOfJoistsY + ribThickness / 2, 0);
+    return geometry;
+  };
+
+  return [board((x) => -half - x), board((x) => half + x)];
+}
+
+/**
+ * Layer 1's full coverage: curved sheets up the transition, plus flat sheets filling in whatever
+ * of the bottom transition those don't already reach.
+ *
+ * Curve coverage tiles skinSheetWidth-wide sheets (arc length, not X-projection, since bent
+ * plywood doesn't stretch), grain (the long, skinSheetLength edge) running parallel to the
+ * ramp's width (Z), perpendicular to the ribs — the only orientation that lets a sheet bend up
+ * the curve at all; bending along the grain breaks it (see skin.ts). Tiled from the coping
+ * notch's own shelfAngle (see coping.ts) *downward* to the ground tangent — a full sheet sits
+ * at the notch, since that's where a cut edge would be most visible/load-bearing. The last
+ * (ground-most) row often runs out of curve before it runs out of sheet — that leftover doesn't
+ * go to waste as a cut sheet; it continues flat onto the bottom transition instead
+ * (curveSheetShape's flatExtension, see skin.ts), the same way a real sheet would just lie flat
+ * once the surface stops bending under it. Tiled across Z in skinSheetLength columns, clipped at
+ * the ramp's edges (±width/2) instead of overhanging past them.
+ *
+ * Flat coverage fills in the rest — grain direction doesn't matter there (nothing bends), so
+ * there's no constraint on which way a sheet is oriented, just whichever needs fewer sheets:
+ * both orientations (long edge along X, long edge along Z) are tiled and compared, and the one
+ * with fewer total sheets wins (ties keep long-edge-X). Centered on the bottom transition (X=0),
+ * tiled outward, clipped to whatever's left after both curve rows' own flatExtension (same
+ * length on both sides, by symmetry) — butted flush against them, not overlapping and not
+ * gapped. Empty (see tileCenteredClipped) once that extension alone already reaches the ramp's
+ * centerline. Also clipped at the ramp's edges (±width/2).
+ */
+export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    joistDepthMm,
+    ribThicknessMm,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
+    skinSheetWidth,
+    skinSheetLength,
+    width,
+  } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000; // the ribs' own drawn curve sits here in world Y — see halfPipeOutline's mapWith
+  const thickness = skinLayer1ThicknessMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
+  );
+  const sweep = notch.shelfAngle;
+
+  const sheets: THREE.BufferGeometry[] = [];
+
+  const rows = curveSheetRows(radius, sweep, skinSheetWidth, skinSheetWidth);
+  const curveZColumns = tileFromEdgeClipped(width / 2, skinSheetLength);
+  for (const { t0, t1, flatExtension } of rows) {
+    for (const [zStart, zEnd] of curveZColumns) {
+      const zSpan = zEnd - zStart;
+      const zCenter = (zStart + zEnd) / 2;
+
+      const left = buildSkinCurveSheet(radius, 0, thickness, t0, t1, zSpan, flatExtension);
+      left.scale(-1, 1, 1);
+      left.translate(-half, jointDepth, zCenter);
+      sheets.push(left);
+
+      const right = buildSkinCurveSheet(radius, 0, thickness, t0, t1, zSpan, flatExtension);
+      right.translate(half, jointDepth, zCenter);
+      sheets.push(right);
     }
   }
-  return joists;
+
+  const groundFlatExtension = rows[rows.length - 1].flatExtension;
+  const reducedHalf = half - groundFlatExtension;
+  const longEdgeAlongX = {
+    xSegments: tileCenteredClipped(reducedHalf, skinSheetLength),
+    zRows: tileFromEdgeClipped(width / 2, skinSheetWidth),
+  };
+  const longEdgeAlongZ = {
+    xSegments: tileCenteredClipped(reducedHalf, skinSheetWidth),
+    zRows: tileFromEdgeClipped(width / 2, skinSheetLength),
+  };
+  const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
+  const { xSegments: flatXSegments, zRows: flatZRows } = countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  for (const [xStart, xEnd] of flatXSegments) {
+    for (const [zStart, zEnd] of flatZRows) {
+      sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, jointDepth));
+    }
+  }
+
+  return sheets;
+}
+
+/**
+ * Layer 2's full coverage — same shape as buildHalfPipeSkinLayer1, sitting on top of layer 1
+ * (outerOffset = skinLayer1ThicknessMm, so its own outer/contact edge is layer 1's own outer
+ * surface, not the bare curve), with two differences from layer 1's design:
+ *
+ * 1. Staggered seams: curveSheetRows' topmost row is half-width (skinLayer2SheetWidth / 2
+ *    instead of the full width every other row uses), so every layer-2 seam lands at the
+ *    midpoint of whichever layer-1 sheet spans it, rather than lining up with a layer-1 seam —
+ *    the usual staggered-joint practice (see curveSheetRows, skin.ts).
+ * 2. The topmost sheet touches the coping: curveSheetShape's coping parameter continues that
+ *    sheet in a straight line, along its own tangent direction at the notch, until its inner
+ *    (exposed, rideable-side) edge is tangent to the coping pipe — copingTouchExtension solves
+ *    exactly how far that is, separately for each edge (the outer edge needs its own, shorter
+ *    distance; reusing the inner edge's would drive it straight through the pipe). The pipe
+ *    itself isn't repositioned; only this one sheet reaches further to meet it, since the
+ *    notch's own shelf cut otherwise leaves the pipe recessed behind where the bare curve (and
+ *    so every other sheet) stops.
+ *
+ * Otherwise identical: skinLayer2SheetWidth/skinLayer2SheetLength in place of
+ * skinSheetWidth/skinSheetLength (its own, independent sheet size), the same coping-notch
+ * cutoff and ramp-edge clipping for the curve sheets, and the same fewer-sheets-wins flat
+ * coverage on the bottom transition (using layer 2's own sheet size and its own
+ * flatExtension) — not staggered against layer 1's flat sheets too; see features.md.
+ */
+export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    joistDepthMm,
+    ribThicknessMm,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
+    skinLayer2SheetWidth,
+    skinLayer2SheetLength,
+    width,
+  } = params;
+  const half = bottomTransitionLength / 2;
+  const outerOffset = skinLayer1ThicknessMm / 1000; // layer 2 sits on top of layer 1, not the bare curve
+  // Curve sheets' own local Y already bakes outerOffset in (via rOuter/rInner in buildSkinCurveSheet),
+  // so they only need the bare joist depth here — adding outerOffset again would double-count it.
+  // Flat sheets have no such baked-in offset, so they need it added explicitly to sit on top of
+  // layer 1's own flat sheets, not the joists directly.
+  const curveJointDepth = joistDepthMm / 1000;
+  const flatY = curveJointDepth + outerOffset;
+  const thickness = skinLayer2ThicknessMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
+  );
+  const sweep = notch.shelfAngle;
+  const pipeRadius = copingOdMm / 1000 / 2;
+  const pipeTouch = { pipeCenter: notch.pipeCenter, pipeRadius };
+
+  const sheets: THREE.BufferGeometry[] = [];
+
+  const rows = curveSheetRows(radius, sweep, skinLayer2SheetWidth, skinLayer2SheetWidth / 2);
+  const curveZColumns = tileFromEdgeClipped(width / 2, skinLayer2SheetLength);
+  rows.forEach(({ t0, t1, flatExtension }, row) => {
+    const coping = row === 0 ? pipeTouch : undefined; // only the row actually reaching the notch
+    for (const [zStart, zEnd] of curveZColumns) {
+      const zSpan = zEnd - zStart;
+      const zCenter = (zStart + zEnd) / 2;
+
+      const left = buildSkinCurveSheet(radius, outerOffset, thickness, t0, t1, zSpan, flatExtension, coping);
+      left.scale(-1, 1, 1);
+      left.translate(-half, curveJointDepth, zCenter);
+      sheets.push(left);
+
+      const right = buildSkinCurveSheet(radius, outerOffset, thickness, t0, t1, zSpan, flatExtension, coping);
+      right.translate(half, curveJointDepth, zCenter);
+      sheets.push(right);
+    }
+  });
+
+  const groundFlatExtension = rows[rows.length - 1].flatExtension;
+  const reducedHalf = half - groundFlatExtension;
+  const longEdgeAlongX = {
+    xSegments: tileCenteredClipped(reducedHalf, skinLayer2SheetLength),
+    zRows: tileFromEdgeClipped(width / 2, skinLayer2SheetWidth),
+  };
+  const longEdgeAlongZ = {
+    xSegments: tileCenteredClipped(reducedHalf, skinLayer2SheetWidth),
+    zRows: tileFromEdgeClipped(width / 2, skinLayer2SheetLength),
+  };
+  const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
+  const { xSegments: flatXSegments, zRows: flatZRows } = countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  for (const [xStart, xEnd] of flatXSegments) {
+    for (const [zStart, zEnd] of flatZRows) {
+      sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, flatY));
+    }
+  }
+
+  return sheets;
 }
 
 /**
@@ -349,10 +719,13 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
     vertHeight,
     deckLength,
     bottomTransitionLength,
+    ribThicknessMm,
     joistDepthMm,
     copingOdMm,
     copingHorizontalProtrusionMm,
     copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
   } = params;
   const half = bottomTransitionLength / 2;
   const jointDepth = joistDepthMm / 1000;
@@ -363,6 +736,8 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
   const [cx, cy] = notch.pipeCenter;
   const y = cy + jointDepth;
