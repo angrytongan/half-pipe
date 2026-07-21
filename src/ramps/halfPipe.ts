@@ -263,6 +263,19 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
  * screwed together directly).
  */
 export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { curveJoists, deckJoists } = buildHalfPipeJoistsBySection(params);
+  return [...curveJoists, ...deckJoists];
+}
+
+/**
+ * Same joists as `buildHalfPipeJoists`, split by landmark instead of returned flat — curve
+ * joists (bottom corner, `internalCurveJoistCount` interior points, notch-shelf) are the ones
+ * under the curved/vert surface a skin would actually cover; deck joists (deck-outer,
+ * ground-below-deck-outer, ground-midpoint) support the flat deck/ground and stay put either
+ * way. Lets `main.ts` hide the former under the "Show skin" toggle while leaving the latter
+ * visible.
+ */
+export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] } {
   const {
     radius,
     transitionAngleDeg,
@@ -320,38 +333,50 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   // two, so no tilt is needed here either.
   const groundMidpoint: [number, number] = [deckOuter[0] / 2, 0];
 
-  // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
-  // rising through the curve, tilted again at the notch's shelf point, flat on the deck floor
-  // (0) — see transitionAndDeckPoints for why deckOuter's own point differs from the curve's
-  // own endpoint (deck start, omitted) — and flat again at ground level, both directly beneath
-  // it and at the midpoint between it and the bottom corner.
-  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter, deckGroundPoint, groundMidpoint];
-  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0, 0, 0];
+  // Tangent angle at each landmark: flat at the bottom corner, rising through the curve, tilted
+  // again at the notch's shelf point (all three "curve" — under the curved/vert surface), then
+  // flat on the deck floor (0) — see transitionAndDeckPoints for why deckOuter's own point
+  // differs from the curve's own endpoint (deck start, omitted) — and flat again at ground
+  // level, both directly beneath it and at the midpoint between it and the bottom corner (all
+  // three "deck" — under the flat deck/ground).
+  const curveLocalPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint];
+  const curveLocalAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle];
+  const curveInwardInset: number[] = [0, ...curveInteriorPoints.map(() => 0), 0];
+
+  const deckLocalPoints: [number, number][] = [deckOuter, deckGroundPoint, groundMidpoint];
+  const deckLocalAngles: number[] = [0, 0, 0];
   // The deck-outer landmark and the ground joist beneath it are both the ramp's own outer edge,
   // where the rib's outline ends flush (no inset) — so those two alone are inset inward by half
   // their own thickness, aligning their external face with the rib's edge instead of centering
-  // the joist on it and sticking half its thickness out past where the rib actually ends. Using
-  // the same inset for both lands them flush, one exactly above the other. The other landmarks,
-  // including the new ground midpoint, sit inside the rib's own material, so they're centered
-  // on their own anchor with no inset.
-  const inwardInset: number[] = [0, ...curveInteriorPoints.map(() => 0), 0, thickness / 2, thickness / 2, 0];
-  const worldJoists: { x: number; y: number; angle: number }[] = [
+  // the joist on it and sticking half its thickness out past where the rib actually ends. The
+  // ground-midpoint landmark sits inside the rib's own material, so it's centered on its own
+  // anchor with no inset.
+  const deckInwardInset: number[] = [thickness / 2, thickness / 2, 0];
+
+  const toWorldJoists = (localPoints: [number, number][], localAngles: number[], inwardInset: number[]): { x: number; y: number; angle: number }[] => [
     ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
     ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),
   ];
 
   const ribZs = ribZPositions(width, internalRibCount, ribThickness);
-  const joists: THREE.BufferGeometry[] = [];
-  for (let i = 0; i < ribZs.length; i += 2) {
-    // ribZs are rib centerlines — the joist is built to butt against each rib's inside face,
-    // not its centerline, so it spans the actual bay, not the centerline-to-centerline gap.
-    const zStart = ribZs[i] + ribThickness / 2;
-    const zEnd = ribZs[i + 1] - ribThickness / 2;
-    for (const { x, y, angle } of worldJoists) {
-      joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth, angle));
+  const buildJoistsAt = (worldJoists: { x: number; y: number; angle: number }[]): THREE.BufferGeometry[] => {
+    const joists: THREE.BufferGeometry[] = [];
+    for (let i = 0; i < ribZs.length; i += 2) {
+      // ribZs are rib centerlines — the joist is built to butt against each rib's inside face,
+      // not its centerline, so it spans the actual bay, not the centerline-to-centerline gap.
+      const zStart = ribZs[i] + ribThickness / 2;
+      const zEnd = ribZs[i + 1] - ribThickness / 2;
+      for (const { x, y, angle } of worldJoists) {
+        joists.push(buildJoistBox(zStart, zEnd, x, y, thickness, depth, angle));
+      }
     }
-  }
-  return joists;
+    return joists;
+  };
+
+  return {
+    curveJoists: buildJoistsAt(toWorldJoists(curveLocalPoints, curveLocalAngles, curveInwardInset)),
+    deckJoists: buildJoistsAt(toWorldJoists(deckLocalPoints, deckLocalAngles, deckInwardInset)),
+  };
 }
 
 /**

@@ -190,9 +190,15 @@ section bay) pair:
   `(x, y)` along the tilted face's own normal `(-sin(angle), cos(angle))` to
   compute the actual box center.
 
-`src/main.ts` renders these in their own `THREE.Group` (`joistGroup`) with
-a distinct wood-toned material, so dozens of small joist boxes read as a
-different material from the blue ribs rather than visual noise.
+`buildHalfPipeJoists` (flat array, all landmarks) is a thin wrapper around
+`buildHalfPipeJoistsBySection`, which splits the same joists into `curveJoists`
+(bottom-corner, curve-interior, notch-shelf — under the curved/vert surface)
+and `deckJoists` (deck-outer, ground-below-deck-outer, ground-midpoint — under
+the flat deck/ground); `main.ts` renders each into its own `THREE.Group`
+(`curveJoistGroup`/`deckJoistGroup`, both a distinct wood-toned material so
+dozens of small joist boxes read as different material from the blue ribs
+rather than visual noise) so "Show skin" can hide the former without touching
+the latter — see Scene below.
 
 ### Coping
 
@@ -338,10 +344,14 @@ hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positio
 from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
 `position: absolute` descendants that overflow it.
 
-A "Show bottom transition" checkbox (`#bottom-transition-toggle`, under "Show scale") toggles
-`bottomTransitionGroup.visible` directly, same pattern as the dimensions/scale toggles above —
-`bottomTransitionGroup.clear()` on rebuild only removes children, it doesn't reset the group's
-own `.visible`, so the hidden/shown state survives param changes without re-wiring.
+A "Show skin" checkbox (`#skin-toggle`, under "Show scale", unchecked by default) toggles three
+groups at once: checking it hides `bottomTransitionGroup` and `curveJoistGroup` (structure a skin
+would cover) and shows `skinGroup` — same direct-`.visible` pattern as the dimensions/scale
+toggles above, so the hidden/shown state survives param changes without re-wiring.
+`deckJoistGroup` isn't touched either way — the deck/ground joists stay visible regardless.
+`skinGroup` exists (empty, `.visible = false` initially) as the future home for skin geometry —
+not built yet (see Skin above), so checking "Show skin" today only hides structure, and renders
+nothing in its place.
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)

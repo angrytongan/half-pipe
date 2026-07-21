@@ -4,6 +4,7 @@ import {
   buildBottomTransitionFrame,
   buildHalfPipeGeometry,
   buildHalfPipeJoists,
+  buildHalfPipeJoistsBySection,
   buildHalfPipeRibs,
   curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
@@ -578,6 +579,31 @@ describe("buildHalfPipeJoists", () => {
 
     // Uninset, so it's the same thickness x depth cross-section as the bottom-corner joist.
     expect(rightJoist!.boundingBox!.max.x - rightJoist!.boundingBox!.min.x).toBeCloseTo(params.joistThicknessMm / 1000, 6);
+  });
+});
+
+describe("buildHalfPipeJoistsBySection", () => {
+  it("splits the same joists buildHalfPipeJoists returns into curveJoists + deckJoists, with no overlap", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const { curveJoists, deckJoists } = buildHalfPipeJoistsBySection(params);
+    expect(curveJoists.length + deckJoists.length).toBe(buildHalfPipeJoists(params).length);
+  });
+
+  it("puts exactly the bottom-corner, curve-interior, and notch-shelf landmarks (both sides, per section) in curveJoists", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 3 };
+    const sections = params.internalRibCount + 1;
+    const pointsPerSide = params.internalCurveJoistCount + 2; // bottom corner, curve interior, notch-shelf
+    const { curveJoists } = buildHalfPipeJoistsBySection(params);
+    expect(curveJoists).toHaveLength(2 * pointsPerSide * sections);
+  });
+
+  it("puts exactly the deck-outer, ground-below-deck-outer, and ground-midpoint landmarks (both sides, per section) in deckJoists, unaffected by internalCurveJoistCount", () => {
+    const fewer = buildHalfPipeJoistsBySection({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 }).deckJoists;
+    const more = buildHalfPipeJoistsBySection({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 5 }).deckJoists;
+    const sections = HALF_PIPE_DEFAULTS.internalRibCount + 1;
+    const pointsPerSide = 3; // deck-outer, ground-below-deck-outer, ground-midpoint
+    expect(fewer).toHaveLength(2 * pointsPerSide * sections);
+    expect(more).toHaveLength(2 * pointsPerSide * sections);
   });
 });
 

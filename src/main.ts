@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   buildBottomTransitionFrame,
-  buildHalfPipeJoists,
+  buildHalfPipeJoistsBySection,
   buildHalfPipeRibs,
   HALF_PIPE_DEFAULTS,
   halfPipeCopingCenters,
@@ -36,7 +36,9 @@ interface RampSpec {
   copingSliders: SliderSpec[];
   skinSliders: SliderSpec[];
   buildRibs: (params: HalfPipeParams) => THREE.BufferGeometry[];
-  buildJoists: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  // Curve joists (under the curved/vert surface, hidden by "Show skin") vs deck joists (under
+  // the flat deck/ground, always visible) — see buildHalfPipeJoistsBySection.
+  buildJoistsBySection: (params: HalfPipeParams) => { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] };
   // The bottom transition's own framing — a stud wall lying on the ground.
   buildBottomTransitionFrame: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // Centers (in the built geometry's own centered coordinate space) of the coping tubes —
@@ -83,7 +85,7 @@ const RAMP: RampSpec = {
     { key: "width", label: "Width (m)", min: 1, max: 4, step: 0.1 },
   ],
   buildRibs: buildHalfPipeRibs,
-  buildJoists: buildHalfPipeJoists,
+  buildJoistsBySection: buildHalfPipeJoistsBySection,
   buildBottomTransitionFrame: buildBottomTransitionFrame,
   copingCenters: halfPipeCopingCenters,
   footprint: halfPipeFootprint,
@@ -117,7 +119,7 @@ const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
 const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
 const scaleToggle = document.getElementById("scale-toggle") as HTMLInputElement;
-const bottomTransitionToggle = document.getElementById("bottom-transition-toggle") as HTMLInputElement;
+const skinToggle = document.getElementById("skin-toggle") as HTMLInputElement;
 const themeToggle = document.getElementById("theme-toggle")!;
 const aboutBtn = document.getElementById("about-btn")!;
 const aboutCloseBtn = document.getElementById("about-close-btn")!;
@@ -166,8 +168,12 @@ const rampGroup = new THREE.Group();
 scene.add(rampGroup);
 
 const joistMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a876, flatShading: true }); // wood-toned, distinct from the ribs
-const joistGroup = new THREE.Group();
-scene.add(joistGroup);
+// Split so "Show skin" can hide the curve joists (under the surface a skin would cover) while
+// leaving the deck joists (flat deck/ground support) visible either way.
+const curveJoistGroup = new THREE.Group();
+scene.add(curveJoistGroup);
+const deckJoistGroup = new THREE.Group();
+scene.add(deckJoistGroup);
 
 const bottomTransitionGroup = new THREE.Group(); // same lumber as the joists, so reuses joistMaterial
 scene.add(bottomTransitionGroup);
@@ -175,6 +181,11 @@ scene.add(bottomTransitionGroup);
 const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalness: 0.6, roughness: 0.4 });
 const copingGroup = new THREE.Group();
 scene.add(copingGroup);
+
+// Future home for skin geometry (not built yet) — "Show skin" already toggles its visibility.
+const skinGroup = new THREE.Group();
+skinGroup.visible = false;
+scene.add(skinGroup);
 
 /** A hollow tube (outer=odMm, inner=idMm), its length running along local Z, centered on all three axes. */
 function buildCopingTubeGeometry(idMm: number, odMm: number, spanWidth: number): THREE.BufferGeometry {
@@ -394,14 +405,24 @@ function rebuildRamp(): void {
     rampGroup.add(rib);
   }
 
-  for (const child of joistGroup.children) {
+  for (const child of curveJoistGroup.children) {
     if (child instanceof THREE.Mesh) child.geometry.dispose();
   }
-  joistGroup.clear();
-  for (const geometry of RAMP.buildJoists(currentParams)) {
+  curveJoistGroup.clear();
+  for (const child of deckJoistGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  deckJoistGroup.clear();
+  const { curveJoists, deckJoists } = RAMP.buildJoistsBySection(currentParams);
+  for (const geometry of curveJoists) {
     const joist = new THREE.Mesh(geometry, joistMaterial);
     joist.castShadow = true;
-    joistGroup.add(joist);
+    curveJoistGroup.add(joist);
+  }
+  for (const geometry of deckJoists) {
+    const joist = new THREE.Mesh(geometry, joistMaterial);
+    joist.castShadow = true;
+    deckJoistGroup.add(joist);
   }
 
   for (const child of bottomTransitionGroup.children) {
@@ -536,8 +557,11 @@ scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
 });
-bottomTransitionToggle.addEventListener("input", () => {
-  bottomTransitionGroup.visible = bottomTransitionToggle.checked;
+skinToggle.addEventListener("input", () => {
+  const showSkin = skinToggle.checked;
+  bottomTransitionGroup.visible = !showSkin;
+  curveJoistGroup.visible = !showSkin;
+  skinGroup.visible = showSkin;
 });
 skinGrainDirectionEl.addEventListener("change", () => {
   history.record(snapshot());
