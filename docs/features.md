@@ -36,9 +36,10 @@ out but the sheet hasn't) continues flat onto the bottom transition
 instead of stopping cut at the seam (`curveSheetShape`'s `flatExtension`)
 — the flat sheets are clipped to whatever that doesn't already reach, so
 the two butt flush against each other with no gap or overlap. Layer 1
-rendered solid, one shade of green per sheet; layer 2 rendered wireframe
-in red, so both stay distinguishable from each other and from the ribs
-underneath (see status.md) — not the intended final materials.
+rendered solid, one shade of green per sheet; layer 2 rendered solid red
+at half opacity, so both stay distinguishable from each other (and layer
+1 stays visible underneath layer 2) and from the ribs underneath (see
+status.md) — not the intended final materials.
 
 Layer 2 has its own, independent sheet-size sliders
 (`skinLayer2SheetLength`/`skinLayer2SheetWidth`) and three differences
@@ -61,11 +62,12 @@ Remaining:
 - [ ] `skinGrainDirection` isn't consumed by any geometry yet — on the curve,
       grain orientation is a hard physical constraint (perpendicular to the
       ribs, so the sheet can bend), not a free choice, so it's unclear where
-      this control would actually apply.
+      this control would actually apply. Disabled in the UI (fixed at
+      "length-ways") until it does something.
 - [ ] Waste-minimization/packing beyond simple deterministic tiling (e.g.
       reusing an off-cut from one row as the start of the next) — sheets are
       currently laid out edge-to-edge and clipped, not optimized to minimize
       scrap.
 - [ ] Real final material/rendering (right now layer 1 is an arbitrary shade
-      of green and layer 2 is red wireframe, purely to tell sheets and
+      of green and layer 2 is translucent red, purely to tell sheets and
       layers apart), once the layout itself is confirmed correct.

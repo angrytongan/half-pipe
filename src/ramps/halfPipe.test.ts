@@ -1160,10 +1160,10 @@ describe("halfPipeFootprint", () => {
 
   it("computes length/width/height at defaults", () => {
     const footprint = halfPipeFootprint(HALF_PIPE_DEFAULTS);
-    // bottomTransitionLength (2.25) + 2 * (radius * sin(57deg) + deckLength) = 2.25 + 2 * (1.8*sin(57deg) + 0.3)
-    expect(footprint.length).toBeCloseTo(5.8692, 4);
+    // bottomTransitionLength (2.4) + 2 * (radius * sin(57deg) + deckLength) = 2.4 + 2 * (1.8*sin(57deg) + 0.6)
+    expect(footprint.length).toBeCloseTo(6.6192, 4);
     // width param directly — edge ribs are inset (see ribZPositions), so no overhang past it
-    expect(footprint.width).toBeCloseTo(3, 5);
+    expect(footprint.width).toBeCloseTo(2.4, 5);
     // radius * (1 - cos(57deg)) + joistDepthMm / 1000 (90mm)
     expect(footprint.height).toBeCloseTo(0.90965, 5);
   });
