@@ -358,13 +358,14 @@ sheets use its own sheet size and its own `flatExtension`, but aren't staggered 
 3. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
    a straight line, along its own tangent direction at the notch, until it reaches the pipe
    (`copingTouchExtension`, an exact line-circle intersection) — a straight-line extension, not
-   a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). The
-   outer and inner edges get their *own* extension distances, computed separately — reusing one
-   edge's distance for the other would either undershoot it or (typically) drive it straight
-   through the pipe, since the two edges start different distances away. The pipe itself isn't
-   repositioned; only this one sheet reaches further to meet it. Renders with a beveled tip since
-   the two edges extend by different amounts — tracked in features.md as a simplification to
-   revisit (square it off instead, accepting a negligible gap/overlap).
+   a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). Both
+   the outer and inner edges extend by the *outer* edge's own distance — the rib/layer-1-contact
+   side, the "bottom" edge (lower world Y than the inner edge at any given t, since it sits at a
+   larger radius from the arc's own center) — that's the edge that actually needs to land
+   tangent to the pipe, not the inner (exposed, "top") edge, so the cut stays a square-edged
+   rectangle rather than a wedge. The inner edge's own tip lands slightly short of, or slightly
+   past, the pipe's actual surface as a result, but that gap/overlap is small enough to be
+   irrelevant. The pipe itself isn't repositioned; only this one sheet reaches further to meet it.
 
 ## Dimension lines
 

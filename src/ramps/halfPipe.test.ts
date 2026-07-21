@@ -932,11 +932,18 @@ describe("buildHalfPipeSkinLayer2", () => {
     expect(checkedAtLeastOne).toBe(true);
   });
 
-  it("makes the topmost sheet's inner (rideable) edge actually reach the coping pipe's surface", () => {
+  it("makes the topmost sheet's outer (rib-contact, 'bottom') edge actually reach the coping pipe's surface", () => {
     const params = HALF_PIPE_DEFAULTS;
     const half = params.bottomTransitionLength / 2;
     const notch = notchOf(params);
     const pipeRadius = params.copingOdMm / 1000 / 2;
+    const outerOffset = params.skinLayer1ThicknessMm / 1000;
+    const rOuter = params.radius - outerOffset;
+    const sweep = notch.shelfAngle;
+    const outerExtension = copingTouchExtension(params.radius, rOuter, sweep, notch.pipeCenter, pipeRadius);
+    const tangent = [Math.cos(sweep), Math.sin(sweep)];
+    const outerPoint = [rOuter * Math.sin(sweep), params.radius - rOuter * Math.cos(sweep)];
+    const expectedTip = [outerPoint[0] + tangent[0] * outerExtension, outerPoint[1] + tangent[1] * outerExtension];
 
     const sheets = buildHalfPipeSkinLayer2(params);
     for (const geometry of sheets) geometry.computeBoundingBox();
@@ -946,15 +953,18 @@ describe("buildHalfPipeSkinLayer2", () => {
 
     const jointDepth = params.joistDepthMm / 1000;
     const position = topSheet.attributes.position;
-    const distances: number[] = [];
-    const [pcx, pcy] = notch.pipeCenter;
+    let found = false;
     for (let i = 0; i < position.count; i++) {
       const x = position.getX(i) - half;
       const y = position.getY(i) - jointDepth;
-      distances.push(Math.sqrt((x - pcx) ** 2 + (y - pcy) ** 2));
+      if (Math.abs(x - expectedTip[0]) < 1e-4 && Math.abs(y - expectedTip[1]) < 1e-4) {
+        found = true;
+        break;
+      }
     }
-    // some vertex of the extended tip lands exactly on the pipe's own surface
-    expect(Math.min(...distances)).toBeCloseTo(pipeRadius, 4);
+    expect(found).toBe(true);
+    const dist = Math.sqrt((expectedTip[0] - notch.pipeCenter[0]) ** 2 + (expectedTip[1] - notch.pipeCenter[1]) ** 2);
+    expect(dist).toBeCloseTo(pipeRadius, 6);
   });
 
   it("sits on top of layer 1, not the bare curve — offset by skinLayer1ThicknessMm in world Y", () => {
@@ -1029,7 +1039,7 @@ describe("buildHalfPipeSkinLayer2", () => {
 });
 
 describe("copingTouchExtension usage sanity", () => {
-  it("gives layer 2's outer and inner edges their own (different) extension toward the coping pipe", () => {
+  it("gives a genuinely different result for the outer vs inner edge radius, even though buildHalfPipeSkinLayer2 only uses the inner one (squared cut, see skin.ts)", () => {
     const params = HALF_PIPE_DEFAULTS;
     const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
     const notch = copingNotch(
@@ -1050,7 +1060,7 @@ describe("copingTouchExtension usage sanity", () => {
     const innerExtension = copingTouchExtension(params.radius, rInner, notch.shelfAngle, notch.pipeCenter, pipeRadius);
     expect(innerExtension).toBeGreaterThan(0);
     expect(outerExtension).toBeGreaterThan(0);
-    expect(outerExtension).not.toBeCloseTo(innerExtension, 5); // confirms they're genuinely computed separately, not the same value reused
+    expect(outerExtension).not.toBeCloseTo(innerExtension, 5);
   });
 });
 

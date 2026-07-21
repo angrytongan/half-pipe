@@ -31,11 +31,14 @@ function arcPointAtRadius(centerRadius: number, r: number, t: number): [number, 
  * pipe, which the notch's own shelf cut otherwise leaves recessed behind where the bare curve
  * stops (see buildHalfPipeSkinLayer2/copingTouchExtension). A straight-line extension, not a
  * curved wrap — consistent with the notch's own wall/shelf, which are themselves straight-line
- * simplifications of the true tangent (coping.ts). The outer and inner edges extend by their
- * *own* distances, each solved so that edge is the one landing tangent to the pipe — extending
- * both by the same (say, the inner edge's) distance would either undershoot the outer edge or,
- * since it typically needs less distance than the inner edge does, push it straight through the
- * pipe instead of stopping at its surface. That makes the lead-out a wedge, not a rectangle.
+ * simplifications of the true tangent (coping.ts). Both edges extend by the *outer* edge's own
+ * distance (the rib/layer-1-contact side, the "bottom" edge — lower world Y than the inner
+ * edge at any given t, since it sits at a larger radius from the arc's own center) — that's the
+ * edge that actually needs to land tangent to the pipe, not the inner (exposed, "top") edge — so
+ * the lead-out stays a square-cut rectangle (its far edge parallel to the sheet's own t1 end)
+ * rather than the wedge a per-edge distance would give. That leaves the inner edge's own tip
+ * landing slightly short of, or slightly past, the pipe's actual surface, but that gap/overlap
+ * is small enough to be irrelevant.
  */
 function curveSheetShape(radius: number, outerOffset: number, thickness: number, t0: number, t1: number, flatExtension = 0, coping?: { pipeCenter: [number, number]; pipeRadius: number }): THREE.Shape {
   const rOuter = radius - outerOffset;
@@ -43,7 +46,7 @@ function curveSheetShape(radius: number, outerOffset: number, thickness: number,
   const extendGround = flatExtension > 0 && t0 === 0;
   const tangentAtT1: [number, number] = [Math.cos(t1), Math.sin(t1)];
   const outerExtension = coping ? copingTouchExtension(radius, rOuter, t1, coping.pipeCenter, coping.pipeRadius) : 0;
-  const innerExtension = coping ? copingTouchExtension(radius, rInner, t1, coping.pipeCenter, coping.pipeRadius) : 0;
+  const innerExtension = outerExtension; // square cut — see the doc comment above
 
   const shape = new THREE.Shape();
   if (extendGround) shape.moveTo(-flatExtension, outerOffset);

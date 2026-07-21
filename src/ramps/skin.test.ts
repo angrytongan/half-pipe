@@ -81,41 +81,53 @@ describe("buildSkinCurveSheet", () => {
     expect(withExtension.boundingBox!.min.x).toBeCloseTo(without.boundingBox!.min.x, 5);
   });
 
-  it("extends toward the coping pipe (using coping) until some point touches its surface", () => {
+  it("extends the outer (rib-contact, 'bottom') edge's own tip until it touches the coping pipe exactly", () => {
     const t1 = 0.4;
-    const rInner = radius - thickness; // outerOffset is 0 here
-    const innerPoint: [number, number] = [rInner * Math.sin(t1), radius - rInner * Math.cos(t1)];
+    const rOuter = radius; // outerOffset is 0 here
+    const outerPoint: [number, number] = [rOuter * Math.sin(t1), radius - rOuter * Math.cos(t1)];
     const tangent = [Math.cos(t1), Math.sin(t1)];
-    // place the pipe directly ahead on the inner edge's own tangent line, guaranteed reachable
-    const pipeCenter: [number, number] = [innerPoint[0] + tangent[0] * 0.05, innerPoint[1] + tangent[1] * 0.05];
+    // place the pipe directly ahead on the outer edge's own tangent line, guaranteed reachable
+    const pipeCenter: [number, number] = [outerPoint[0] + tangent[0] * 0.05, outerPoint[1] + tangent[1] * 0.05];
     const pipeRadius = 0.02;
+    const outerExtension = copingTouchExtension(radius, rOuter, t1, pipeCenter, pipeRadius);
+    const expectedTip = [outerPoint[0] + tangent[0] * outerExtension, outerPoint[1] + tangent[1] * outerExtension];
 
     const geometry = buildSkinCurveSheet(radius, 0, thickness, 0.1, t1, 1, 0, { pipeCenter, pipeRadius });
     const position = geometry.attributes.position;
-    let minDist = Infinity;
+    let found = false;
     for (let i = 0; i < position.count; i++) {
-      const dx = position.getX(i) - pipeCenter[0];
-      const dy = position.getY(i) - pipeCenter[1];
-      minDist = Math.min(minDist, Math.sqrt(dx * dx + dy * dy));
+      if (Math.abs(position.getX(i) - expectedTip[0]) < 1e-6 && Math.abs(position.getY(i) - expectedTip[1]) < 1e-6) {
+        found = true;
+        break;
+      }
     }
-    expect(minDist).toBeCloseTo(pipeRadius, 4);
+    expect(found).toBe(true);
+    const dist = Math.sqrt((expectedTip[0] - pipeCenter[0]) ** 2 + (expectedTip[1] - pipeCenter[1]) ** 2);
+    expect(dist).toBeCloseTo(pipeRadius, 6);
   });
 
-  it("never lets any vertex — including the outer edge's own extended tip — land inside the pipe", () => {
+  it("squares the cut off — extends the inner edge by the same distance as the outer edge, not its own", () => {
     const t1 = 0.4;
-    const rInner = radius - thickness;
+    const rOuter = radius;
+    const rInner = radius - thickness; // outerOffset is 0 here
+    const outerPoint: [number, number] = [rOuter * Math.sin(t1), radius - rOuter * Math.cos(t1)];
     const innerPoint: [number, number] = [rInner * Math.sin(t1), radius - rInner * Math.cos(t1)];
     const tangent = [Math.cos(t1), Math.sin(t1)];
-    const pipeCenter: [number, number] = [innerPoint[0] + tangent[0] * 0.05, innerPoint[1] + tangent[1] * 0.05];
+    const pipeCenter: [number, number] = [outerPoint[0] + tangent[0] * 0.05, outerPoint[1] + tangent[1] * 0.05];
     const pipeRadius = 0.02;
+    const outerExtension = copingTouchExtension(radius, rOuter, t1, pipeCenter, pipeRadius);
+    const expectedInnerTip = [innerPoint[0] + tangent[0] * outerExtension, innerPoint[1] + tangent[1] * outerExtension];
 
     const geometry = buildSkinCurveSheet(radius, 0, thickness, 0.1, t1, 1, 0, { pipeCenter, pipeRadius });
     const position = geometry.attributes.position;
+    let found = false;
     for (let i = 0; i < position.count; i++) {
-      const dx = position.getX(i) - pipeCenter[0];
-      const dy = position.getY(i) - pipeCenter[1];
-      expect(Math.sqrt(dx * dx + dy * dy)).toBeGreaterThanOrEqual(pipeRadius - 1e-6);
+      if (Math.abs(position.getX(i) - expectedInnerTip[0]) < 1e-6 && Math.abs(position.getY(i) - expectedInnerTip[1]) < 1e-6) {
+        found = true;
+        break;
+      }
     }
+    expect(found).toBe(true); // squared, not the inner edge's own (different) tangent distance
   });
 });
 

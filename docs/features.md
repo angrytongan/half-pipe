@@ -52,16 +52,6 @@ the coping pipe (`copingTouchExtension`) — see status.md for all three.
 
 Remaining:
 
-- [ ] The sheet meeting the coping (layer 2's topmost row, extended via
-      `copingTouchExtension`) currently renders with a beveled/angled cut
-      at its tip, since the outer and inner edges are extended by their own
-      separately-solved distances (see buildHalfPipeSkinLayer2) — a wedge,
-      not a square edge. Accepted fix: square that edge off instead, using
-      the inner edge's own extension distance for both edges (the earlier,
-      simpler rectangular-cap approach this wedge replaced) — the outer
-      edge may then land slightly short of, or slightly past, the pipe's
-      actual surface, but that gap/overlap is small enough to be
-      irrelevant.
 - [ ] Layer 2's flat (bottom-transition) sheets aren't staggered against
       layer 1's flat sheets — only the curved coverage's seams are staggered.
       Since layer 1's own flat-sheet orientation is itself chosen per-ramp
