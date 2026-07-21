@@ -133,7 +133,11 @@ section bay) pair:
   external face with the rib's edge instead of centering the joist there
   and sticking half its thickness out past where the rib actually ends —
   using the same inset for both lands them exactly flush, one stacked on
-  the other. No joist at the deck/curve corner itself
+  the other. A third ground-level joist sits at the centerline midpoint
+  (by X) between the bottom-corner and deck-outer-ground joists — the
+  rib's own ground-level base is a flat line the whole way between those
+  two, so this one is flat too, just centered on its own anchor rather
+  than inset to an edge. No joist at the deck/curve corner itself
   (deck start) — tilted to the curve's own tangent there while anchored
   exactly where the flat deck begins, its top face would rise above the
   deck surface, physically intersecting it. The topmost curve joist is

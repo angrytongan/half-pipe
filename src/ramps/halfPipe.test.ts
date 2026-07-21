@@ -231,7 +231,7 @@ describe("buildBottomTransitionFrame", () => {
 describe("buildHalfPipeJoists", () => {
   it("produces the expected number of joists at defaults", () => {
     const { internalRibCount, internalCurveJoistCount } = HALF_PIPE_DEFAULTS;
-    const pointsPerSide = internalCurveJoistCount + 4; // bottom corner, curve interior, notch-shelf, floor-section end, ground below floor-section end
+    const pointsPerSide = internalCurveJoistCount + 5; // bottom corner, curve interior, notch-shelf, floor-section end, ground below floor-section end, ground midpoint
     const perSection = 2 * pointsPerSide; // both sides — no joist under the middle of the bottom transition
     const sections = internalRibCount + 1;
 
@@ -252,10 +252,10 @@ describe("buildHalfPipeJoists", () => {
     expect(more.length - base.length).toBe(2 * sections); // both sides
   });
 
-  it("still builds only the bottom-corner, notch-shelf, deck-outer, and ground-below-deck-outer landmarks when internalCurveJoistCount is 0", () => {
+  it("still builds only the bottom-corner, notch-shelf, deck-outer, ground-below-deck-outer, and ground-midpoint landmarks when internalCurveJoistCount is 0", () => {
     const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 };
     const sections = params.internalRibCount + 1;
-    const pointsPerSide = 4; // bottom corner, notch-shelf, floor-section end, ground below it — no curve interior
+    const pointsPerSide = 5; // bottom corner, notch-shelf, floor-section end, ground below it, ground midpoint — no curve interior
     expect(buildHalfPipeJoists(params)).toHaveLength(2 * pointsPerSide * sections);
   });
 
@@ -545,6 +545,38 @@ describe("buildHalfPipeJoists", () => {
     // Same inset external face as the deck-outer joist above it — the two stack flush.
     expect(rightJoist!.boundingBox!.max.x).toBeCloseTo(deckOuterWorldXRight, 6);
     expect(leftJoist!.boundingBox!.min.x).toBeCloseTo(-deckOuterWorldXRight, 6);
+  });
+
+  it("adds a third ground joist centered exactly halfway (by X) between the bottom-corner and deck-outer-ground joists", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const [deckOuterX] = points[points.length - 1];
+    // Bottom-corner joist's centerline (local x=0, uninset) and deck-outer-ground joist's
+    // centerline (local x=deckOuterX, uninset — the inset shifts its box, not its own anchor).
+    const bottomCornerCenterX = half;
+    const deckGroundCenterX = half + deckOuterX;
+    const expectedCenterXRight = (bottomCornerCenterX + deckGroundCenterX) / 2;
+
+    const groundJoists = buildHalfPipeJoists(params).filter((joist) => {
+      joist.computeBoundingBox();
+      const box = joist.boundingBox!;
+      return Math.abs(box.max.y - jointDepth) < 1e-6 && Math.abs(box.min.y) < 1e-6;
+    });
+    const rightJoist = groundJoists.find((joist) => {
+      const box = joist.boundingBox!;
+      return Math.abs((box.min.x + box.max.x) / 2 - expectedCenterXRight) < 1e-6;
+    });
+    const leftJoist = groundJoists.find((joist) => {
+      const box = joist.boundingBox!;
+      return Math.abs((box.min.x + box.max.x) / 2 + expectedCenterXRight) < 1e-6;
+    });
+    expect(rightJoist).toBeDefined();
+    expect(leftJoist).toBeDefined();
+
+    // Uninset, so it's the same thickness x depth cross-section as the bottom-corner joist.
+    expect(rightJoist!.boundingBox!.max.x - rightJoist!.boundingBox!.min.x).toBeCloseTo(params.joistThicknessMm / 1000, 6);
   });
 });
 

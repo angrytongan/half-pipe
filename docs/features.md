@@ -26,11 +26,6 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       `buildHalfPipeJoists` (`src/ramps/halfPipe.ts`) into a shared helper
       first, to avoid duplicating that geometry math.
 
-## Joists
-
-- [ ] A joist needs to be present at the half-way point of the width of the rib
-      at ground level.
-
 ## Coping
 
 - [ ] Reposition the notch's vertical cut once the ramp's actual riding

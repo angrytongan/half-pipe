@@ -188,7 +188,10 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
  * see `halfPipeOutline` above) is otherwise unjoisted. Flat (angle 0) and ground-touching, same
  * `y = 0` to `jointDepth` span as the bottom-corner joist, just at the deck-outer end's X instead
  * of the curve's tangent X — and inset by the same `thickness / 2` the deck-outer joist itself
- * uses, so the two land exactly flush, one stacked on the other. No
+ * uses, so the two land exactly flush, one stacked on the other. A third ground-level joist sits
+ * at the centerline midpoint (by X) between the bottom-corner and deck-outer-ground joists — the
+ * rib's own ground-level base is a flat line the whole way between those two, so this one is
+ * flat and uninset too, just centered rather than flush to an edge. No
  * joist at the deck/curve corner itself (deck start) — tilted to the curve's own tangent there
  * (as steep as `transitionAngleDeg`) while anchored exactly where the flat deck begins, its top
  * face would rise above the deck surface on the deck side of its own centerline, physically
@@ -274,18 +277,27 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
   // close the shape for extrusion. Same local y=0 (ground) convention as the bottom corner.
   const deckGroundPoint: [number, number] = [deckOuter[0], 0];
 
+  // Third ground joist, centered exactly halfway (by X, centerline to centerline — no edge
+  // adjustment, unlike the curve-interior joists) between the bottom corner (local x=0) and the
+  // deck-ground point above — the rib's whole ground-level base is a flat line between those
+  // two, so no tilt is needed here either.
+  const groundMidpoint: [number, number] = [deckOuter[0] / 2, 0];
+
   // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
   // rising through the curve, tilted again at the notch's shelf point, flat on the deck floor
   // (0) — see transitionAndDeckPoints for why deckOuter's own point differs from the curve's
-  // own endpoint (deck start, omitted) — and flat again at ground level, directly beneath it.
-  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter, deckGroundPoint];
-  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0, 0];
-  // The deck-outer landmark and the new ground joist beneath it are both the ramp's own outer
-  // edge, where the rib's outline ends flush (no inset) — so those two alone are inset inward by
-  // half their own thickness, aligning their external face with the rib's edge instead of
-  // centering the joist on it and sticking half its thickness out past where the rib actually
-  // ends. Using the same inset for both lands them flush, one exactly above the other.
-  const inwardInset = localPoints.map((_, i) => (i >= localPoints.length - 2 ? thickness / 2 : 0));
+  // own endpoint (deck start, omitted) — and flat again at ground level, both directly beneath
+  // it and at the midpoint between it and the bottom corner.
+  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter, deckGroundPoint, groundMidpoint];
+  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0, 0, 0];
+  // The deck-outer landmark and the ground joist beneath it are both the ramp's own outer edge,
+  // where the rib's outline ends flush (no inset) — so those two alone are inset inward by half
+  // their own thickness, aligning their external face with the rib's edge instead of centering
+  // the joist on it and sticking half its thickness out past where the rib actually ends. Using
+  // the same inset for both lands them flush, one exactly above the other. The other landmarks,
+  // including the new ground midpoint, sit inside the rib's own material, so they're centered
+  // on their own anchor with no inset.
+  const inwardInset: number[] = [0, ...curveInteriorPoints.map(() => 0), 0, thickness / 2, thickness / 2, 0];
   const worldJoists: { x: number; y: number; angle: number }[] = [
     ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
     ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),
