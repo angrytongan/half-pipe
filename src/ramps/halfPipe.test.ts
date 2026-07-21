@@ -692,3 +692,16 @@ describe("halfPipeFootprint", () => {
     expect(wider.width - base.width).toBeCloseTo(1, 5);
   });
 });
+
+describe("HALF_PIPE_DEFAULTS skin", () => {
+  it("defaults both skin layers to 12mm", () => {
+    expect(HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm).toBe(12);
+    expect(HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm).toBe(12);
+  });
+
+  it("defaults the sheet size to 2.4m x 1.2m, length-ways", () => {
+    expect(HALF_PIPE_DEFAULTS.skinSheetLength).toBe(2.4);
+    expect(HALF_PIPE_DEFAULTS.skinSheetWidth).toBe(1.2);
+    expect(HALF_PIPE_DEFAULTS.skinGrainDirection).toBe("length-ways");
+  });
+});

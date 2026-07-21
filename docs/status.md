@@ -227,6 +227,21 @@ is dispatched on it so the existing per-slider state-sync/rebuild wiring still f
 before/after `.value` check stops the two listeners from ping-ponging). Re-wired every time the
 coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to defaults").
 
+### Skin
+
+Controls only so far — no plywood geometry/rendering yet (tracked in features.md). A "Skin"
+section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the ground) and
+`skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default 12mm each; two
+more, `skinSheetLength`/`skinSheetWidth` (1–3.6m / 0.6–1.5m, default 2.4m/1.2m — a standard
+"8×4" sheet); and a `skinGrainDirection` select (`"length-ways"` default / `"width-ways"`,
+`SkinGrainDirection` in `halfPipe.ts`) for which way a sheet is laid relative to the ribs —
+length-ways runs the sheet's major axis perpendicular to the ribs (bending across the minor
+axis), width-ways the reverse. All are `HalfPipeParams` fields like everywhere else, so undo/
+redo and "Reset to defaults" already cover them for free. The select is wired by hand in
+`main.ts` rather than through `renderSliderList` (that helper is number-only) — its `change`
+listener records an undo snapshot the same way `resetParams` does, and `renderAllSliderGroups`
+syncs its displayed value from `currentParams` on load/undo/redo/reset.
+
 ## Dimension lines
 
 CAD-style dimension lines, first pass, half-pipe only. `src/dimensions/dimensionLine.ts`'s
@@ -339,9 +354,9 @@ title that opens a native `<dialog id="about-modal">` describing the app — `.s
 closed via its own button, a backdrop click, or the native Esc handling `<dialog>` provides for
 free — "in development" pill, GitHub link) matching `obstacle`'s header, above an
 `.app` flex row holding the `#panel` (the undo/redo buttons, then the
-reset-view button and "Show dimensions" toggle, at the top, then an accordion of six
+reset-view button and "Show dimensions" toggle, at the top, then an accordion of seven
 independently-collapsible sections — Available space, Ramp parameters,
-Ribs, Joists, Bottom transition, Coping, each a plain native
+Ribs, Joists, Bottom transition, Coping, Skin, each a plain native
 `<details>`/`<summary>` so no JS is needed — then the reset-to-defaults
 button) and `#viewport` (3D view) cards. Both share a `.card` class
 (border/radius/shadow/opaque background — `var(--card-bg)`); `#viewport`

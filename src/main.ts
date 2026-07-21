@@ -8,6 +8,7 @@ import {
   halfPipeCopingCenters,
   halfPipeFootprint,
   type HalfPipeParams,
+  type SkinGrainDirection,
 } from "./ramps/halfPipe";
 import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
 import { HistoryStack } from "./history";
@@ -33,6 +34,7 @@ interface RampSpec {
   bottomTransitionSliders: SliderSpec[];
   rampSliders: SliderSpec[];
   copingSliders: SliderSpec[];
+  skinSliders: SliderSpec[];
   buildRibs: (params: HalfPipeParams) => THREE.BufferGeometry[];
   buildJoists: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // The bottom transition's own framing — a stud wall lying on the ground.
@@ -67,6 +69,12 @@ const RAMP: RampSpec = {
     { key: "copingHorizontalProtrusionMm", label: "Horizontal protrusion (mm)", min: 0, max: 15, step: 0.1 },
     { key: "copingVerticalProtrusionMm", label: "Vertical protrusion (mm)", min: 0, max: 15, step: 0.1 },
   ],
+  skinSliders: [
+    { key: "skinLayer1ThicknessMm", label: "Layer 1 thickness (mm)", min: 3, max: 25, step: 1 },
+    { key: "skinLayer2ThicknessMm", label: "Layer 2 thickness (mm)", min: 3, max: 25, step: 1 },
+    { key: "skinSheetLength", label: "Sheet length (m)", min: 1, max: 3.6, step: 0.01 },
+    { key: "skinSheetWidth", label: "Sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
+  ],
   rampSliders: [
     { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
     { key: "transitionAngleDeg", label: "Transition angle (°)", min: 45, max: 90, step: 1 },
@@ -100,6 +108,8 @@ const ribSlidersEl = document.getElementById("rib-sliders")!;
 const joistSlidersEl = document.getElementById("joist-sliders")!;
 const bottomTransitionSlidersEl = document.getElementById("bottom-transition-sliders")!;
 const copingSlidersEl = document.getElementById("coping-sliders")!;
+const skinSlidersEl = document.getElementById("skin-sliders")!;
+const skinGrainDirectionEl = document.getElementById("skin-grain-direction") as HTMLSelectElement;
 const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
 const resetViewBtn = document.getElementById("reset-view-btn")!;
@@ -457,16 +467,19 @@ function bindDiameterBound(source: HTMLInputElement, target: HTMLInputElement, b
 }
 
 function renderAllSliderGroups(): void {
-  // Every HalfPipeParams field is a number, just without a formal index signature — the
-  // slider list only reads/writes by key name, so this cast is a pure type-level widening,
-  // not a runtime lie (mutations below still land on the same currentParams object).
+  // Every HalfPipeParams field is a number except skinGrainDirection (a string enum, synced
+  // separately below) — the slider list only reads/writes by key name, so this cast is a pure
+  // type-level widening, not a runtime lie (mutations below still land on the same
+  // currentParams object).
   const state = currentParams as unknown as Record<string, number>;
   renderSliderList(ribSlidersEl, RAMP.ribSliders, state, rebuildRamp);
   renderSliderList(joistSlidersEl, RAMP.joistSliders, state, rebuildRamp);
   renderSliderList(bottomTransitionSlidersEl, RAMP.bottomTransitionSliders, state, rebuildRamp);
   renderSliderList(copingSlidersEl, RAMP.copingSliders, state, rebuildRamp);
+  renderSliderList(skinSlidersEl, RAMP.skinSliders, state, rebuildRamp);
   renderSliderList(rampSlidersEl, RAMP.rampSliders, state, rebuildRamp);
   renderSliderList(spaceSlidersEl, AVAILABLE_SPACE_SLIDERS, availableSpace, renderSpaceStatus);
+  skinGrainDirectionEl.value = currentParams.skinGrainDirection;
 
   const odInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingOdMm"]')!;
   const idInput = copingSlidersEl.querySelector<HTMLInputElement>('[data-key="copingIdMm"]')!;
@@ -525,6 +538,12 @@ scaleToggle.addEventListener("input", () => {
 });
 bottomTransitionToggle.addEventListener("input", () => {
   bottomTransitionGroup.visible = bottomTransitionToggle.checked;
+});
+skinGrainDirectionEl.addEventListener("change", () => {
+  history.record(snapshot());
+  currentParams.skinGrainDirection = skinGrainDirectionEl.value as SkinGrainDirection;
+  rebuildRamp();
+  updateHistoryButtons();
 });
 
 // Tooltip is position: fixed to escape #panel's overflow clipping, so its screen position has to be computed in JS rather than via CSS anchoring to an ancestor.

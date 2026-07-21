@@ -5,6 +5,16 @@ import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
 
+/**
+ * Which way a plywood sheet is laid relative to the ribs it skins: "length-ways" runs the
+ * sheet's major (length) axis perpendicular to the ribs, so it must bend across its minor
+ * (width) axis to follow the curve; "width-ways" runs the minor axis parallel to the ribs
+ * instead, bending across the major axis. Plywood bends far more easily across the grain
+ * than along it, so this determines whether a given sheet size can follow the transition
+ * radius at all — not yet used by any geometry, controls-only for now.
+ */
+export type SkinGrainDirection = "length-ways" | "width-ways";
+
 export interface HalfPipeParams {
   radius: number;
   transitionAngleDeg: number;
@@ -22,6 +32,11 @@ export interface HalfPipeParams {
   copingOdMm: number;
   copingHorizontalProtrusionMm: number;
   copingVerticalProtrusionMm: number;
+  skinLayer1ThicknessMm: number;
+  skinLayer2ThicknessMm: number;
+  skinSheetLength: number;
+  skinSheetWidth: number;
+  skinGrainDirection: SkinGrainDirection;
 }
 
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
@@ -41,6 +56,11 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   copingOdMm: 60.3,
   copingHorizontalProtrusionMm: 3.2,
   copingVerticalProtrusionMm: 6.4,
+  skinLayer1ThicknessMm: 12,
+  skinLayer2ThicknessMm: 12,
+  skinSheetLength: 2.4,
+  skinSheetWidth: 1.2,
+  skinGrainDirection: "length-ways",
 };
 
 /**
