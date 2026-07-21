@@ -156,7 +156,15 @@ section bay) pair:
   already cut away into the notch, so a centered joist would have nothing
   to sit flush against on that side. Sitting below/behind the corner,
   inside the notch, it can't rise above the deck the way the
-  corner-anchored version did. The `internalCurveJoistCount` interior
+  corner-anchored version did. A fourth deck-level joist sits at the
+  deck's *inner* edge, where `copingNotch`'s plumb wall cuts into it —
+  `notch.wallTop` is already the point where that vertical cut meets the
+  flat deck, used directly as its anchor. Flat like the deck-outer joist,
+  but inset the *opposite* way (outward, by `thickness / 2` — a negative
+  `inwardInset` value) since the deck material here starts at the wall and
+  runs outward from it, the mirror image of the deck-outer landmark's own
+  edge convention — so it's this joist's notch-side face, not its center,
+  that lands flush against the wall. The `internalCurveJoistCount` interior
   points are spaced *evenly by arc length between the two boundary
   joists' own edges* — the bottom-most joist's inside (uphill) edge and
   the topmost joist's bottom (downhill) edge — not their anchor points:
@@ -196,8 +204,9 @@ section bay) pair:
 `buildHalfPipeJoists` (flat array, all landmarks) is a thin wrapper around
 `buildHalfPipeJoistsBySection`, which splits the same joists into `curveJoists`
 (bottom-corner, curve-interior, notch-shelf — under the curved/vert surface)
-and `deckJoists` (deck-outer, ground-below-deck-outer, ground-midpoint — under
-the flat deck/ground); `main.ts` renders each into its own `THREE.Group`
+and `deckJoists` (deck-outer, deck-inner at the notch's plumb wall,
+ground-below-deck-outer, ground-midpoint — under the flat deck/ground);
+`main.ts` renders each into its own `THREE.Group`
 (`curveJoistGroup`/`deckJoistGroup`, both a distinct wood-toned material so
 dozens of small joist boxes read as different material from the blue ribs
 rather than visual noise) so "Show skin" can hide the former without touching

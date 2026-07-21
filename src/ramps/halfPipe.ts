@@ -258,7 +258,13 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
  * uses, so the two land exactly flush, one stacked on the other. A third ground-level joist sits
  * at the centerline midpoint (by X) between the bottom-corner and deck-outer-ground joists — the
  * rib's own ground-level base is a flat line the whole way between those two, so this one is
- * flat and uninset too, just centered rather than flush to an edge. No
+ * flat and uninset too, just centered rather than flush to an edge. A fourth deck-level joist
+ * sits at the deck's *inner* edge, where `copingNotch`'s plumb wall cuts into it —
+ * `notch.wallTop` is already the point where that cut meets the flat deck, so it's used
+ * directly. Flat like the deck-outer joist, but inset the *opposite* way (outward, by
+ * `thickness / 2`) since the deck material here starts at the wall and runs outward from it,
+ * the mirror image of the deck-outer landmark's own edge — so it's this joist's notch-side face,
+ * not its center, that butts flush against the wall. No
  * joist at the deck/curve corner itself (deck start) — tilted to the curve's own tangent there
  * (as steep as `transitionAngleDeg`) while anchored exactly where the flat deck begins, its top
  * face would rise above the deck surface on the deck side of its own centerline, physically
@@ -287,10 +293,10 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
 /**
  * Same joists as `buildHalfPipeJoists`, split by landmark instead of returned flat — curve
  * joists (bottom corner, `internalCurveJoistCount` interior points, notch-shelf) are the ones
- * under the curved/vert surface a skin would actually cover; deck joists (deck-outer,
- * ground-below-deck-outer, ground-midpoint) support the flat deck/ground and stay put either
- * way. Lets `main.ts` hide the former under the "Show skin" toggle while leaving the latter
- * visible.
+ * under the curved/vert surface a skin would actually cover; deck joists (deck-outer, deck-inner
+ * at the notch's plumb wall, ground-below-deck-outer, ground-midpoint) support the flat
+ * deck/ground and stay put either way. Lets `main.ts` hide the former under the "Show skin"
+ * toggle while leaving the latter visible.
  */
 export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] } {
   const {
@@ -360,15 +366,24 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
   const curveLocalAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle];
   const curveInwardInset: number[] = [0, ...curveInteriorPoints.map(() => 0), 0];
 
-  const deckLocalPoints: [number, number][] = [deckOuter, deckGroundPoint, groundMidpoint];
-  const deckLocalAngles: number[] = [0, 0, 0];
+  // The deck's inner edge, where the notch's plumb wall cuts into it — `notch.wallTop` is
+  // already the point where that vertical cut meets the flat deck. Flat (angle 0) like every
+  // other deck landmark, but inset *outward* (the opposite sign from deck-outer, below) by half
+  // the joist's own thickness, so its face on the notch side — not its center — butts flush
+  // against the wall instead of straddling it. The deck material itself starts at the wall and
+  // runs outward from there (the notch cuts away everything on the curve side of it), the
+  // mirror image of the deck-outer landmark's own edge convention.
+  const deckInnerPoint: [number, number] = notch.wallTop;
+
+  const deckLocalPoints: [number, number][] = [deckOuter, deckInnerPoint, deckGroundPoint, groundMidpoint];
+  const deckLocalAngles: number[] = [0, 0, 0, 0];
   // The deck-outer landmark and the ground joist beneath it are both the ramp's own outer edge,
   // where the rib's outline ends flush (no inset) — so those two alone are inset inward by half
   // their own thickness, aligning their external face with the rib's edge instead of centering
   // the joist on it and sticking half its thickness out past where the rib actually ends. The
   // ground-midpoint landmark sits inside the rib's own material, so it's centered on its own
-  // anchor with no inset.
-  const deckInwardInset: number[] = [thickness / 2, thickness / 2, 0];
+  // anchor with no inset. deckInnerPoint uses the opposite sign — see its own comment above.
+  const deckInwardInset: number[] = [thickness / 2, -thickness / 2, thickness / 2, 0];
 
   const toWorldJoists = (localPoints: [number, number][], localAngles: number[], inwardInset: number[]): { x: number; y: number; angle: number }[] => [
     ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
