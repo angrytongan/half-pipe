@@ -9,36 +9,62 @@ function arcPointAtRadius(centerRadius: number, r: number, t: number): [number, 
 
 /**
  * One curved skin sheet's 2D cross-section: a "washer" slice between two concentric arcs
- * sharing the transition's own center (local (0, radius)) — the rib-contact (outer) edge at
- * the curve's own radius, and the exposed (inner, toward the ramp's concave/rideable side) edge
- * at radius - thickness. Offsetting a circle by a constant distance along its own normal
- * produces a smaller concentric circle, not a general curve — the same fact coping.ts leans on
- * near the notch, exact here rather than approximate since the whole cross-section is built
- * from it, not just one corner point. t0/t1 are the segment's start/end arc parameters
- * (radians, 0 at the ground tangent, matching transitionArcPoints).
+ * sharing the transition's own center (local (0, radius)) — the outer (rib-contact, or for
+ * layer 2, layer-1-contact) edge at radius - outerOffset, and the exposed (inner, toward the
+ * ramp's concave/rideable side) edge at radius - outerOffset - thickness. Offsetting a circle by
+ * a constant distance along its own normal produces a smaller concentric circle, not a general
+ * curve — the same fact coping.ts leans on near the notch, exact here rather than approximate
+ * since the whole cross-section is built from it, not just one corner point. outerOffset is 0
+ * for layer 1 (its outer edge sits on the bare curve itself) and layer 1's own thickness for
+ * layer 2 (its outer edge sits on layer 1's own outer surface instead — see
+ * buildHalfPipeSkinLayer2). t0/t1 are the segment's start/end arc parameters (radians, 0 at the
+ * ground tangent, matching transitionArcPoints).
  *
  * flatExtension, when t0 is 0 (this sheet reaches the ground tangent), adds a flat lead-in
  * running further in -x from there — the sheet's own leftover length once the curve runs out,
  * continuing flat onto the bottom transition instead of stopping short at the seam (see
  * buildHalfPipeSkinLayer1). Ignored (no lead-in added) unless t0 is actually 0 — there'd be
  * nothing at x=0 for it to attach to otherwise.
+ *
+ * coping, at the opposite (t1) end, adds a straight lead-out continuing along the curve's own
+ * tangent direction there — layer 2's topmost sheet reaching to physically touch the coping
+ * pipe, which the notch's own shelf cut otherwise leaves recessed behind where the bare curve
+ * stops (see buildHalfPipeSkinLayer2/copingTouchExtension). A straight-line extension, not a
+ * curved wrap — consistent with the notch's own wall/shelf, which are themselves straight-line
+ * simplifications of the true tangent (coping.ts). The outer and inner edges extend by their
+ * *own* distances, each solved so that edge is the one landing tangent to the pipe — extending
+ * both by the same (say, the inner edge's) distance would either undershoot the outer edge or,
+ * since it typically needs less distance than the inner edge does, push it straight through the
+ * pipe instead of stopping at its surface. That makes the lead-out a wedge, not a rectangle.
  */
-function curveSheetShape(radius: number, thickness: number, t0: number, t1: number, flatExtension = 0): THREE.Shape {
-  const extend = flatExtension > 0 && t0 === 0;
+function curveSheetShape(radius: number, outerOffset: number, thickness: number, t0: number, t1: number, flatExtension = 0, coping?: { pipeCenter: [number, number]; pipeRadius: number }): THREE.Shape {
+  const rOuter = radius - outerOffset;
+  const rInner = radius - outerOffset - thickness;
+  const extendGround = flatExtension > 0 && t0 === 0;
+  const tangentAtT1: [number, number] = [Math.cos(t1), Math.sin(t1)];
+  const outerExtension = coping ? copingTouchExtension(radius, rOuter, t1, coping.pipeCenter, coping.pipeRadius) : 0;
+  const innerExtension = coping ? copingTouchExtension(radius, rInner, t1, coping.pipeCenter, coping.pipeRadius) : 0;
+
   const shape = new THREE.Shape();
-  if (extend) shape.moveTo(-flatExtension, 0);
+  if (extendGround) shape.moveTo(-flatExtension, outerOffset);
   for (let i = 0; i <= SHEET_ARC_SEGMENTS; i++) {
     const t = t0 + ((t1 - t0) * i) / SHEET_ARC_SEGMENTS;
-    const [x, y] = arcPointAtRadius(radius, radius, t);
-    if (i === 0 && !extend) shape.moveTo(x, y);
+    const [x, y] = arcPointAtRadius(radius, rOuter, t);
+    if (i === 0 && !extendGround) shape.moveTo(x, y);
     else shape.lineTo(x, y);
   }
-  for (let i = 0; i <= SHEET_ARC_SEGMENTS; i++) {
+  if (coping) {
+    const [ox, oy] = arcPointAtRadius(radius, rOuter, t1);
+    shape.lineTo(ox + tangentAtT1[0] * outerExtension, oy + tangentAtT1[1] * outerExtension);
+    const [ix, iy] = arcPointAtRadius(radius, rInner, t1);
+    shape.lineTo(ix + tangentAtT1[0] * innerExtension, iy + tangentAtT1[1] * innerExtension);
+  }
+  for (let i = coping ? 1 : 0; i <= SHEET_ARC_SEGMENTS; i++) {
     const t = t1 - ((t1 - t0) * i) / SHEET_ARC_SEGMENTS;
-    const [x, y] = arcPointAtRadius(radius, radius - thickness, t);
+    const [x, y] = arcPointAtRadius(radius, rInner, t);
     shape.lineTo(x, y);
   }
-  if (extend) shape.lineTo(-flatExtension, thickness);
+  if (extendGround) shape.lineTo(-flatExtension, outerOffset + thickness);
   shape.closePath();
   return shape;
 }
@@ -46,14 +72,80 @@ function curveSheetShape(radius: number, thickness: number, t0: number, t1: numb
 /**
  * One curved skin sheet, local/unmirrored (x >= 0, rising from the ground tangent at t=0 like
  * transitionArcPoints) — extruded across zSpan and centered on Z so callers just translate to
- * the column's center Z (and mirror/shift X for the left/right side, see buildHalfPipeSkinLayer1).
- * flatExtension: see curveSheetShape.
+ * the column's center Z (and mirror/shift X for the left/right side, see
+ * buildHalfPipeSkinLayer1/2). outerOffset/flatExtension/coping: see curveSheetShape.
  */
-export function buildSkinCurveSheet(radius: number, thickness: number, t0: number, t1: number, zSpan: number, flatExtension = 0): THREE.BufferGeometry {
-  const shape = curveSheetShape(radius, thickness, t0, t1, flatExtension);
+export function buildSkinCurveSheet(
+  radius: number,
+  outerOffset: number,
+  thickness: number,
+  t0: number,
+  t1: number,
+  zSpan: number,
+  flatExtension = 0,
+  coping?: { pipeCenter: [number, number]; pipeRadius: number },
+): THREE.BufferGeometry {
+  const shape = curveSheetShape(radius, outerOffset, thickness, t0, t1, flatExtension, coping);
   const geometry = new THREE.ExtrudeGeometry(shape, { depth: zSpan, bevelEnabled: false });
   geometry.translate(0, 0, -zSpan / 2);
   return geometry;
+}
+
+/**
+ * Row boundaries (arc parameters t0/t1, plus that row's own flatExtension — see
+ * curveSheetShape) tiling a curve of `sweep` radians downward from the top in `sheetWidth`
+ * arc-length steps, except the very first (topmost) row, which uses `starterWidth` instead.
+ * Layer 1 passes starterWidth === sheetWidth (no special first row). Layer 2 passes half of it,
+ * so its own seams land at the midpoint of layer 1's sheets instead of lining up with them (see
+ * buildHalfPipeSkinLayer2) — the standard staggered-seam practice, same reason drywall or
+ * brick coursing offsets each row from the one below it. The last (ground-most) row's own
+ * flatExtension is however much of its row width it didn't use up on the curve, once it reaches
+ * the ground tangent (0 for every other row).
+ */
+export function curveSheetRows(radius: number, sweep: number, sheetWidth: number, starterWidth: number): { t0: number; t1: number; flatExtension: number }[] {
+  const rowWidthAt = (row: number) => (row === 0 ? starterWidth : sheetWidth);
+
+  let rowCount = 0;
+  let consumed = 0;
+  while (consumed < radius * sweep - TILE_EPSILON) {
+    consumed += rowWidthAt(rowCount);
+    rowCount++;
+  }
+  rowCount = Math.max(1, rowCount);
+
+  const rows: { t0: number; t1: number; flatExtension: number }[] = [];
+  let cumulative = 0;
+  for (let row = 0; row < rowCount; row++) {
+    const rowWidth = rowWidthAt(row);
+    const t1 = Math.max(sweep - cumulative / radius, 0);
+    cumulative += rowWidth;
+    const t0 = Math.max(sweep - cumulative / radius, 0);
+    const flatExtension = Math.max(rowWidth - radius * (t1 - t0), 0);
+    rows.push({ t0, t1, flatExtension });
+  }
+  return rows;
+}
+
+/**
+ * How far a sheet edge at radius r, reaching the notch (t1 === sweep), must extend past its own
+ * curve endpoint, along the curve's own tangent direction there, to become tangent to the coping
+ * pipe's own surface — a straight line-circle intersection, solved exactly. 0 if that line never
+ * reaches the pipe at all (shouldn't happen for a real notch, but avoids a NaN result rather
+ * than assuming it always will). Call once per edge (r = the outer or inner radius) — see
+ * curveSheetShape's coping parameter and buildHalfPipeSkinLayer2, since the two edges generally
+ * need different distances.
+ */
+export function copingTouchExtension(radius: number, r: number, sweep: number, pipeCenter: [number, number], pipeRadius: number): number {
+  const [px, py] = arcPointAtRadius(radius, r, sweep);
+  const [tx, ty] = [Math.cos(sweep), Math.sin(sweep)];
+  const [cx, cy] = pipeCenter;
+  const vx = px - cx;
+  const vy = py - cy;
+  const vDotT = vx * tx + vy * ty;
+  const vDotV = vx * vx + vy * vy;
+  const discriminant = vDotT * vDotT - (vDotV - pipeRadius * pipeRadius);
+  if (discriminant < 0) return 0;
+  return Math.max(-vDotT - Math.sqrt(discriminant), 0);
 }
 
 const TILE_EPSILON = 1e-9;

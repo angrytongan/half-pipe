@@ -6,6 +6,7 @@ import {
   buildHalfPipeJoistsBySection,
   buildHalfPipeRibsBySection,
   buildHalfPipeSkinLayer1,
+  buildHalfPipeSkinLayer2,
   HALF_PIPE_DEFAULTS,
   halfPipeCopingCenters,
   halfPipeFootprint,
@@ -47,8 +48,12 @@ interface RampSpec {
   buildDeck: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // The bottom transition's own framing — a stud wall lying on the ground.
   buildBottomTransitionFrame: (params: HalfPipeParams) => THREE.BufferGeometry[];
-  // Layer 1 skin, curved coverage over the transition only so far (see buildHalfPipeSkinLayer1).
+  // Layer 1 skin — curved coverage over the transition plus flat coverage on the bottom
+  // transition (see buildHalfPipeSkinLayer1).
   buildSkinLayer1: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  // Layer 2 skin — same shape as layer 1, staggered against it and touching the coping (see
+  // buildHalfPipeSkinLayer2).
+  buildSkinLayer2: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // Centers (in the built geometry's own centered coordinate space) of the coping tubes —
   // the curve/deck lip, not the deck's outer edge. See decisions.md.
   copingCenters: (params: HalfPipeParams) => { x: number; y: number }[];
@@ -82,8 +87,10 @@ const RAMP: RampSpec = {
   skinSliders: [
     { key: "skinLayer1ThicknessMm", label: "Layer 1 thickness (mm)", min: 3, max: 25, step: 1 },
     { key: "skinLayer2ThicknessMm", label: "Layer 2 thickness (mm)", min: 3, max: 25, step: 1 },
-    { key: "skinSheetLength", label: "Sheet length (m)", min: 1, max: 3.6, step: 0.01 },
-    { key: "skinSheetWidth", label: "Sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
+    { key: "skinSheetLength", label: "Layer 1 sheet length (m)", min: 1, max: 3.6, step: 0.01 },
+    { key: "skinSheetWidth", label: "Layer 1 sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
+    { key: "skinLayer2SheetLength", label: "Layer 2 sheet length (m)", min: 1, max: 3.6, step: 0.01 },
+    { key: "skinLayer2SheetWidth", label: "Layer 2 sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
   ],
   rampSliders: [
     { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
@@ -97,6 +104,7 @@ const RAMP: RampSpec = {
   buildDeck: buildHalfPipeDeck,
   buildBottomTransitionFrame: buildBottomTransitionFrame,
   buildSkinLayer1: buildHalfPipeSkinLayer1,
+  buildSkinLayer2: buildHalfPipeSkinLayer2,
   copingCenters: halfPipeCopingCenters,
   footprint: halfPipeFootprint,
   buildDimensions: buildHalfPipeDimensions,
@@ -206,6 +214,13 @@ const SKIN_HUE = 1 / 3; // green
 const skinGroup = new THREE.Group();
 skinGroup.visible = false;
 scene.add(skinGroup);
+
+// Layer 2 rendered wireframe in red, distinct from layer 1's solid green — so the two layers
+// (and how layer 2's seams stagger against layer 1's) stay visually distinguishable at once.
+const skinLayer2LineMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 });
+const skinLayer2Group = new THREE.Group();
+skinLayer2Group.visible = false;
+scene.add(skinLayer2Group);
 
 /** A hollow tube (outer=odMm, inner=idMm), its length running along local Z, centered on all three axes. */
 function buildCopingTubeGeometry(idMm: number, odMm: number, spanWidth: number): THREE.BufferGeometry {
@@ -498,6 +513,17 @@ function rebuildRamp(): void {
     skinGroup.add(sheet);
   });
 
+  for (const child of skinLayer2Group.children) {
+    if (child instanceof THREE.LineSegments) child.geometry.dispose();
+  }
+  skinLayer2Group.clear();
+  for (const geometry of RAMP.buildSkinLayer2(currentParams)) {
+    // Same high threshold angle as layer 1's own wireframe used, to drop the curve's own
+    // internal arc-facet seams and keep just each sheet's real silhouette.
+    const sheet = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), skinLayer2LineMaterial);
+    skinLayer2Group.add(sheet);
+  }
+
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);
   repositionFigures(currentParams);
@@ -626,6 +652,7 @@ skinToggle.addEventListener("input", () => {
   curveJoistGroup.visible = !showSkin;
   internalRibGroup.visible = !showSkin;
   skinGroup.visible = showSkin;
+  skinLayer2Group.visible = showSkin;
 });
 skinGrainDirectionEl.addEventListener("change", () => {
   history.record(snapshot());

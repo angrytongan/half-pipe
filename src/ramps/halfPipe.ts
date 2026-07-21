@@ -4,7 +4,7 @@ import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
-import { buildSkinCurveSheet, buildSkinFlatSheet, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { buildSkinCurveSheet, buildSkinFlatSheet, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 /**
  * Which way a plywood sheet is laid relative to the ribs it skins: "length-ways" runs the
@@ -37,6 +37,8 @@ export interface HalfPipeParams {
   skinLayer2ThicknessMm: number;
   skinSheetLength: number;
   skinSheetWidth: number;
+  skinLayer2SheetLength: number;
+  skinLayer2SheetWidth: number;
   skinGrainDirection: SkinGrainDirection;
 }
 
@@ -61,6 +63,8 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   skinLayer2ThicknessMm: 12,
   skinSheetLength: 2.4,
   skinSheetWidth: 1.2,
+  skinLayer2SheetLength: 2.4,
+  skinLayer2SheetWidth: 1.2,
   skinGrainDirection: "length-ways",
 };
 
@@ -553,29 +557,25 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
 
   const sheets: THREE.BufferGeometry[] = [];
 
-  const rowCount = Math.max(1, Math.ceil((radius * sweep) / skinSheetWidth));
+  const rows = curveSheetRows(radius, sweep, skinSheetWidth, skinSheetWidth);
   const curveZColumns = tileFromEdgeClipped(width / 2, skinSheetLength);
-  let groundFlatExtension = 0;
-  for (let row = 0; row < rowCount; row++) {
-    const t1 = Math.max(sweep - (row * skinSheetWidth) / radius, 0);
-    const t0 = Math.max(sweep - ((row + 1) * skinSheetWidth) / radius, 0);
-    const flatExtension = Math.max(skinSheetWidth - radius * (t1 - t0), 0); // this row's own leftover, once the curve runs out
-    groundFlatExtension = flatExtension; // only the last (ground-most) row's value survives the loop
+  for (const { t0, t1, flatExtension } of rows) {
     for (const [zStart, zEnd] of curveZColumns) {
       const zSpan = zEnd - zStart;
       const zCenter = (zStart + zEnd) / 2;
 
-      const left = buildSkinCurveSheet(radius, thickness, t0, t1, zSpan, flatExtension);
+      const left = buildSkinCurveSheet(radius, 0, thickness, t0, t1, zSpan, flatExtension);
       left.scale(-1, 1, 1);
       left.translate(-half, jointDepth, zCenter);
       sheets.push(left);
 
-      const right = buildSkinCurveSheet(radius, thickness, t0, t1, zSpan, flatExtension);
+      const right = buildSkinCurveSheet(radius, 0, thickness, t0, t1, zSpan, flatExtension);
       right.translate(half, jointDepth, zCenter);
       sheets.push(right);
     }
   }
 
+  const groundFlatExtension = rows[rows.length - 1].flatExtension;
   const reducedHalf = half - groundFlatExtension;
   const longEdgeAlongX = {
     xSegments: tileCenteredClipped(reducedHalf, skinSheetLength),
@@ -590,6 +590,114 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
   for (const [xStart, xEnd] of flatXSegments) {
     for (const [zStart, zEnd] of flatZRows) {
       sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, jointDepth));
+    }
+  }
+
+  return sheets;
+}
+
+/**
+ * Layer 2's full coverage — same shape as buildHalfPipeSkinLayer1, sitting on top of layer 1
+ * (outerOffset = skinLayer1ThicknessMm, so its own outer/contact edge is layer 1's own outer
+ * surface, not the bare curve), with two differences from layer 1's design:
+ *
+ * 1. Staggered seams: curveSheetRows' topmost row is half-width (skinLayer2SheetWidth / 2
+ *    instead of the full width every other row uses), so every layer-2 seam lands at the
+ *    midpoint of whichever layer-1 sheet spans it, rather than lining up with a layer-1 seam —
+ *    the usual staggered-joint practice (see curveSheetRows, skin.ts).
+ * 2. The topmost sheet touches the coping: curveSheetShape's coping parameter continues that
+ *    sheet in a straight line, along its own tangent direction at the notch, until its inner
+ *    (exposed, rideable-side) edge is tangent to the coping pipe — copingTouchExtension solves
+ *    exactly how far that is, separately for each edge (the outer edge needs its own, shorter
+ *    distance; reusing the inner edge's would drive it straight through the pipe). The pipe
+ *    itself isn't repositioned; only this one sheet reaches further to meet it, since the
+ *    notch's own shelf cut otherwise leaves the pipe recessed behind where the bare curve (and
+ *    so every other sheet) stops.
+ *
+ * Otherwise identical: skinLayer2SheetWidth/skinLayer2SheetLength in place of
+ * skinSheetWidth/skinSheetLength (its own, independent sheet size), the same coping-notch
+ * cutoff and ramp-edge clipping for the curve sheets, and the same fewer-sheets-wins flat
+ * coverage on the bottom transition (using layer 2's own sheet size and its own
+ * flatExtension) — not staggered against layer 1's flat sheets too; see features.md.
+ */
+export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const {
+    radius,
+    transitionAngleDeg,
+    vertHeight,
+    deckLength,
+    bottomTransitionLength,
+    joistDepthMm,
+    ribThicknessMm,
+    copingOdMm,
+    copingHorizontalProtrusionMm,
+    copingVerticalProtrusionMm,
+    skinLayer1ThicknessMm,
+    skinLayer2ThicknessMm,
+    skinLayer2SheetWidth,
+    skinLayer2SheetLength,
+    width,
+  } = params;
+  const half = bottomTransitionLength / 2;
+  const outerOffset = skinLayer1ThicknessMm / 1000; // layer 2 sits on top of layer 1, not the bare curve
+  // Curve sheets' own local Y already bakes outerOffset in (via rOuter/rInner in buildSkinCurveSheet),
+  // so they only need the bare joist depth here — adding outerOffset again would double-count it.
+  // Flat sheets have no such baked-in offset, so they need it added explicitly to sit on top of
+  // layer 1's own flat sheets, not the joists directly.
+  const curveJointDepth = joistDepthMm / 1000;
+  const flatY = curveJointDepth + outerOffset;
+  const thickness = skinLayer2ThicknessMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
+  );
+  const sweep = notch.shelfAngle;
+  const pipeRadius = copingOdMm / 1000 / 2;
+  const pipeTouch = { pipeCenter: notch.pipeCenter, pipeRadius };
+
+  const sheets: THREE.BufferGeometry[] = [];
+
+  const rows = curveSheetRows(radius, sweep, skinLayer2SheetWidth, skinLayer2SheetWidth / 2);
+  const curveZColumns = tileFromEdgeClipped(width / 2, skinLayer2SheetLength);
+  rows.forEach(({ t0, t1, flatExtension }, row) => {
+    const coping = row === 0 ? pipeTouch : undefined; // only the row actually reaching the notch
+    for (const [zStart, zEnd] of curveZColumns) {
+      const zSpan = zEnd - zStart;
+      const zCenter = (zStart + zEnd) / 2;
+
+      const left = buildSkinCurveSheet(radius, outerOffset, thickness, t0, t1, zSpan, flatExtension, coping);
+      left.scale(-1, 1, 1);
+      left.translate(-half, curveJointDepth, zCenter);
+      sheets.push(left);
+
+      const right = buildSkinCurveSheet(radius, outerOffset, thickness, t0, t1, zSpan, flatExtension, coping);
+      right.translate(half, curveJointDepth, zCenter);
+      sheets.push(right);
+    }
+  });
+
+  const groundFlatExtension = rows[rows.length - 1].flatExtension;
+  const reducedHalf = half - groundFlatExtension;
+  const longEdgeAlongX = {
+    xSegments: tileCenteredClipped(reducedHalf, skinLayer2SheetLength),
+    zRows: tileFromEdgeClipped(width / 2, skinLayer2SheetWidth),
+  };
+  const longEdgeAlongZ = {
+    xSegments: tileCenteredClipped(reducedHalf, skinLayer2SheetWidth),
+    zRows: tileFromEdgeClipped(width / 2, skinLayer2SheetLength),
+  };
+  const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
+  const { xSegments: flatXSegments, zRows: flatZRows } = countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  for (const [xStart, xEnd] of flatXSegments) {
+    for (const [zStart, zEnd] of flatZRows) {
+      sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, flatY));
     }
   }
 

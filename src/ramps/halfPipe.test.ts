@@ -9,6 +9,7 @@ import {
   buildHalfPipeRibs,
   buildHalfPipeRibsBySection,
   buildHalfPipeSkinLayer1,
+  buildHalfPipeSkinLayer2,
   curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
   halfPipeFootprint,
@@ -18,7 +19,7 @@ import {
 import { ribZPositions } from "./ribs";
 import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
-import { tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { copingTouchExtension, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -894,6 +895,139 @@ describe("buildHalfPipeSkinLayer1", () => {
       }),
     );
     expect(minZ).toBeCloseTo(-params.width / 2, 5);
+  });
+});
+
+describe("buildHalfPipeSkinLayer2", () => {
+  const notchOf = (params: HalfPipeParams) => {
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    return copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+  };
+
+  it("staggers its seams to the midpoint of layer 1's sheets, when both share the same sheet width (the default)", () => {
+    // small sheets relative to the sweep, so most rows are full-width, not the one ground row
+    // whose own real extent is clamped short — its "midpoint" isn't the nominal one, see below
+    const params = { ...HALF_PIPE_DEFAULTS, skinSheetWidth: 0.3, skinLayer2SheetWidth: 0.3 };
+    const sweep = notchOf(params).shelfAngle;
+    const layer1Rows = curveSheetRows(params.radius, sweep, params.skinSheetWidth, params.skinSheetWidth);
+    const layer2Rows = curveSheetRows(params.radius, sweep, params.skinLayer2SheetWidth, params.skinLayer2SheetWidth / 2);
+
+    let checkedAtLeastOne = false;
+    for (let i = 0; i < layer1Rows.length - 1; i++) {
+      const seam = layer1Rows[i].t0; // == layer1Rows[i + 1].t1
+      const containingRow = layer2Rows.find((r) => seam <= r.t1 + 1e-9 && seam >= r.t0 - 1e-9);
+      expect(containingRow).toBeDefined();
+      if (containingRow!.flatExtension > 0) continue; // the ground row's own extent is clamped by the ground, not the nominal width — its midpoint isn't meaningful here
+      expect(seam).toBeCloseTo((containingRow!.t0 + containingRow!.t1) / 2, 5);
+      checkedAtLeastOne = true;
+    }
+    expect(checkedAtLeastOne).toBe(true);
+  });
+
+  it("makes the topmost sheet's inner (rideable) edge actually reach the coping pipe's surface", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const notch = notchOf(params);
+    const pipeRadius = params.copingOdMm / 1000 / 2;
+
+    const sheets = buildHalfPipeSkinLayer2(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const rightSheets = sheets.filter((g) => g.type === "ExtrudeGeometry" && (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2 > 0);
+    // the topmost sheet is whichever right-side curve sheet reaches furthest toward the notch
+    const topSheet = rightSheets.reduce((a, b) => (a.boundingBox!.max.x > b.boundingBox!.max.x ? a : b));
+
+    const jointDepth = params.joistDepthMm / 1000;
+    const position = topSheet.attributes.position;
+    const distances: number[] = [];
+    const [pcx, pcy] = notch.pipeCenter;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i) - half;
+      const y = position.getY(i) - jointDepth;
+      distances.push(Math.sqrt((x - pcx) ** 2 + (y - pcy) ** 2));
+    }
+    // some vertex of the extended tip lands exactly on the pipe's own surface
+    expect(Math.min(...distances)).toBeCloseTo(pipeRadius, 4);
+  });
+
+  it("sits on top of layer 1, not the bare curve — offset by skinLayer1ThicknessMm in world Y", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+    const outerOffset = params.skinLayer1ThicknessMm / 1000;
+
+    const sheets = buildHalfPipeSkinLayer2(params);
+    const rightSheets = sheets.filter((geometry) => {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      return (box.min.x + box.max.x) / 2 > 0;
+    });
+    const minX = Math.min(...rightSheets.map((g) => g.boundingBox!.min.x));
+    const minY = Math.min(...rightSheets.map((g) => g.boundingBox!.min.y));
+    expect(minX).toBeLessThanOrEqual(half); // the ground row's own leftover still reaches onto the bottom transition
+    expect(minY).toBeCloseTo(jointDepth + outerOffset, 5);
+  });
+
+  it("also fills in flat coverage on the bottom transition, using its own sheet size", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sheets = buildHalfPipeSkinLayer2(params);
+    expect(sheets.some((g) => g.type === "BoxGeometry")).toBe(true);
+  });
+
+  it("uses its own independent sheet dimensions, not layer 1's", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, skinLayer2SheetWidth: 0.6, skinLayer2SheetLength: 1.2 };
+    const sweep = notchOf(params).shelfAngle;
+    const layer2RowsCustom = curveSheetRows(params.radius, sweep, params.skinLayer2SheetWidth, params.skinLayer2SheetWidth / 2);
+    const layer2RowsDefault = curveSheetRows(params.radius, sweep, HALF_PIPE_DEFAULTS.skinLayer2SheetWidth, HALF_PIPE_DEFAULTS.skinLayer2SheetWidth / 2);
+    expect(layer2RowsCustom.length).not.toBe(layer2RowsDefault.length);
+
+    const sheetsCustom = buildHalfPipeSkinLayer2(params);
+    const sheetsDefault = buildHalfPipeSkinLayer1(HALF_PIPE_DEFAULTS);
+    expect(sheetsCustom.length).not.toBe(sheetsDefault.length);
+  });
+
+  it("mirrors left/right about X=0", () => {
+    const sheets = buildHalfPipeSkinLayer2(HALF_PIPE_DEFAULTS);
+    const xExtents = sheets.map((geometry) => {
+      geometry.computeBoundingBox();
+      return (geometry.boundingBox!.min.x + geometry.boundingBox!.max.x) / 2;
+    });
+    const right = xExtents.filter((x) => x > 0);
+    const left = xExtents.filter((x) => x < 0);
+    expect(right).toHaveLength(left.length);
+  });
+});
+
+describe("copingTouchExtension usage sanity", () => {
+  it("gives layer 2's outer and inner edges their own (different) extension toward the coping pipe", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+    const outerOffset = params.skinLayer1ThicknessMm / 1000;
+    const thickness = params.skinLayer2ThicknessMm / 1000;
+    const pipeRadius = params.copingOdMm / 1000 / 2;
+    const rOuter = params.radius - outerOffset;
+    const rInner = params.radius - outerOffset - thickness;
+    const outerExtension = copingTouchExtension(params.radius, rOuter, notch.shelfAngle, notch.pipeCenter, pipeRadius);
+    const innerExtension = copingTouchExtension(params.radius, rInner, notch.shelfAngle, notch.pipeCenter, pipeRadius);
+    expect(innerExtension).toBeGreaterThan(0);
+    expect(outerExtension).toBeGreaterThan(0);
+    expect(outerExtension).not.toBeCloseTo(innerExtension, 5); // confirms they're genuinely computed separately, not the same value reused
   });
 });
 

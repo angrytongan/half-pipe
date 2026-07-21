@@ -280,41 +280,50 @@ coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to
 
 A "Skin" section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the
 ground) and `skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default
-12mm each; two more, `skinSheetLength`/`skinSheetWidth` (1–3.6m / 0.6–1.5m, default 2.4m/1.2m —
-a standard "8×4" sheet); and a `skinGrainDirection` select (`"length-ways"` default /
-`"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way a sheet is laid relative to
-the ribs — length-ways runs the sheet's major axis perpendicular to the ribs (bending across the
-minor axis), width-ways the reverse; not yet consumed by any geometry (see below). All are
-`HalfPipeParams` fields like everywhere else, so undo/redo and "Reset to defaults" already cover
-them for free. The select is wired by hand in `main.ts` rather than through `renderSliderList`
-(that helper is number-only) — its `change` listener records an undo snapshot the same way
-`resetParams` does, and `renderAllSliderGroups` syncs its displayed value from `currentParams`
-on load/undo/redo/reset.
+12mm each; four more for sheet size — `skinSheetLength`/`skinSheetWidth` for layer 1 and
+`skinLayer2SheetLength`/`skinLayer2SheetWidth` for layer 2, independent of each other (1–3.6m /
+0.6–1.5m, default 2.4m/1.2m each — a standard "8×4" sheet); and a `skinGrainDirection` select
+(`"length-ways"` default / `"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way
+a sheet is laid relative to the ribs — length-ways runs the sheet's major axis perpendicular to
+the ribs (bending across the minor axis), width-ways the reverse; not yet consumed by any
+geometry (see features.md). All are `HalfPipeParams` fields like everywhere else, so undo/redo
+and "Reset to defaults" already cover them for free. The select is wired by hand in `main.ts`
+rather than through `renderSliderList` (that helper is number-only) — its `change` listener
+records an undo snapshot the same way `resetParams` does, and `renderAllSliderGroups` syncs its
+displayed value from `currentParams` on load/undo/redo/reset.
 
-`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's full coverage —
-curved sheets up the transition plus flat sheets filling in the bottom transition; no layer 2
-yet (see features.md). Rendered solid (`skinGroup` in `main.ts`), one `MeshStandardMaterial` per
-sheet, all the same green hue (`SKIN_HUE`) but a different lightness each (`0.25` to `0.75`,
+`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1`/`buildHalfPipeSkinLayer2` build
+each layer's full coverage — curved sheets up the transition plus flat sheets filling in the
+bottom transition. Layer 1 rendered solid (`skinGroup` in `main.ts`), one `MeshStandardMaterial`
+per sheet, all the same green hue (`SKIN_HUE`) but a different lightness each (`0.25` to `0.75`,
 spread evenly across however many sheets there are) so individual sheets are distinguishable —
 not because it's the intended final material. `side: THREE.DoubleSide`, same as the rib material
 — the left side's sheets are built by mirroring (`geometry.scale(-1,1,1)`), which flips winding
-without correcting it. Toggled by "Show skin" like the rest of that group.
+without correcting it. Layer 2 rendered wireframe in red instead (`skinLayer2Group`,
+`EdgesGeometry` with the same 20° threshold angle layer 1's own wireframe used to have, dropping
+the curve's internal arc-facet seams) — kept visually distinct from layer 1's solid green so
+both layers, and how layer 2's seams stagger against layer 1's, stay readable at once. Both
+groups toggle together with "Show skin".
 
 **Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
-arcs sharing the transition's own center — the outer edge exactly on the transition curve, the
-inner (exposed, rideable-side) edge offset inward by `skinLayer1ThicknessMm`. Offsetting a
-circle by a constant distance along its own normal is just a smaller concentric circle, so this
-is exact, not approximated. Tiled in `skinSheetWidth`-wide arc-length rows (not X-projection —
-bent plywood doesn't stretch), grain (the long `skinSheetLength` edge) running parallel to the
-ramp's width (Z), perpendicular to the ribs — the only orientation that lets a sheet bend up the
-curve at all; that's a hard physical constraint, not something `skinGrainDirection` picks. Tiled
-*from the coping notch's own `shelfAngle` (see coping.ts) downward* to the ground tangent — a
-full sheet sits at the notch. The ground-most row usually runs out of curve before it runs out
-of sheet; rather than cut it short there, `curveSheetShape`'s `flatExtension` continues that
-leftover length flat, past the ground tangent and onto the bottom transition (only when its own
-`t0` is exactly 0 — nothing to attach a lead-in to otherwise) — the same way a real sheet just
-lies flat once the surface under it stops bending. Tiled across Z in `skinSheetLength` columns
-(`tileFromEdgeClipped`, skin.ts), clipped at the ramp's edges (±width/2) instead of overhanging.
+arcs sharing the transition's own center — the outer edge at `radius - outerOffset`, the inner
+(exposed, rideable-side) edge a further `thickness` in from that. Offsetting a circle by a
+constant distance along its own normal is just a smaller concentric circle, so this is exact,
+not approximated. `outerOffset` is 0 for layer 1 (its outer edge sits on the bare curve) and
+`skinLayer1ThicknessMm` for layer 2 (its outer edge sits on layer 1's own outer surface instead
+— see buildHalfPipeSkinLayer2). Tiled in `skinSheetWidth`-wide (or `skinLayer2SheetWidth` for
+layer 2) arc-length rows (not X-projection — bent plywood doesn't stretch), grain (the long
+`skinSheetLength`/`skinLayer2SheetLength` edge) running parallel to the ramp's width (Z),
+perpendicular to the ribs — the only orientation that lets a sheet bend up the curve at all;
+that's a hard physical constraint, not something `skinGrainDirection` picks. Tiled *from the
+coping notch's own `shelfAngle` (see coping.ts) downward* to the ground tangent, via
+`curveSheetRows` (skin.ts) — a full sheet sits at the notch. The ground-most row usually runs
+out of curve before it runs out of sheet; rather than cut it short there, `curveSheetShape`'s
+`flatExtension` continues that leftover length flat, past the ground tangent and onto the
+bottom transition (only when its own `t0` is exactly 0 — nothing to attach a lead-in to
+otherwise) — the same way a real sheet just lies flat once the surface under it stops bending.
+Tiled across Z in `skinSheetLength`/`skinLayer2SheetLength` columns (`tileFromEdgeClipped`,
+skin.ts), clipped at the ramp's edges (±width/2) instead of overhanging.
 
 **Flat sheets**: `buildSkinFlatSheet`, plain boxes filling in whatever of the bottom transition
 the curve rows' own `flatExtension` doesn't already reach — nothing bends there, so there's no
@@ -325,7 +334,26 @@ proportions actually call for. Centered at X=0 (`tileCenteredClipped`, skin.ts),
 clipped to `±(half - flatExtension)` (both curve rows share the same `flatExtension`, by
 left/right symmetry) so they butt flush against the curve rows' own reach — no gap, no overlap.
 Empty if that reach alone already covers to the ramp's centerline (`tileCenteredClipped` returns
-`[]` for a non-positive span). Also clipped at the ramp's edges (±width/2).
+`[]` for a non-positive span). Also clipped at the ramp's edges (±width/2). Layer 2's own flat
+sheets use its own sheet size and its own `flatExtension`, but aren't staggered against layer
+1's flat sheets — see features.md.
+
+**Layer 2's two differences from layer 1** (both in `buildHalfPipeSkinLayer2`):
+1. *Staggered seams* — `curveSheetRows`' topmost row is half-width
+   (`skinLayer2SheetWidth / 2`) instead of the full width every row after it uses, so every
+   layer-2 seam lands at the midpoint of whichever layer-1 sheet spans it (when both layers
+   share the same sheet width — the default) rather than lining up with a layer-1 seam, the
+   standard staggered-joint practice. That guarantee only holds for *full* (non-ground-clamped)
+   rows — the ground-most row's own real extent is set by where it hits the ground, not by the
+   nominal row width, so its "midpoint" isn't the nominal one either.
+2. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
+   a straight line, along its own tangent direction at the notch, until it reaches the pipe
+   (`copingTouchExtension`, an exact line-circle intersection) — a straight-line extension, not
+   a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). The
+   outer and inner edges get their *own* extension distances, computed separately — reusing one
+   edge's distance for the other would either undershoot it or (typically) drive it straight
+   through the pipe, since the two edges start different distances away. The pipe itself isn't
+   repositioned; only this one sheet reaches further to meet it.
 
 ## Dimension lines
 

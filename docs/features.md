@@ -23,28 +23,39 @@ created by the joists and ribs, which provides the surface to skate on. We use
 multiple layers instead of a single thick one so we're able to bend the
 plywood without breaking it.
 
-Layer 1's full coverage is built (`src/ramps/skin.ts` + `halfPipe.ts`'s
-`buildHalfPipeSkinLayer1`, see status.md): curved sheets up the transition,
-cut off at the coping notch, clipped at the ramp's edges, grain forced
-perpendicular to the ribs so they can bend, tiled from the notch downward
-so a full sheet sits there (not a cut one); plus flat sheets on the bottom
-transition, centered at X=0, oriented whichever way (long edge along X or
-along Z) needs fewer sheets — no grain constraint there, so a fixed
-direction would just risk more cuts/wasted offcuts than necessary. The
-ground-most curve row's
-own leftover (once the curve runs out but the sheet hasn't) continues flat
-onto the bottom transition instead of stopping cut at the seam
-(`curveSheetShape`'s `flatExtension`) — the flat sheets are clipped to
-whatever that doesn't already reach, so the two butt flush against each
-other with no gap or overlap. Rendered solid, one shade of green per
-sheet, to check placement — not the intended final material (see
-status.md).
+Both layers' full coverage are built (`src/ramps/skin.ts` + `halfPipe.ts`'s
+`buildHalfPipeSkinLayer1`/`buildHalfPipeSkinLayer2`, see status.md): curved
+sheets up the transition, cut off at the coping notch, clipped at the
+ramp's edges, grain forced perpendicular to the ribs so they can bend,
+tiled from the notch downward so a full sheet sits there (not a cut one);
+plus flat sheets on the bottom transition, centered at X=0, oriented
+whichever way (long edge along X or along Z) needs fewer sheets — no grain
+constraint there, so a fixed direction would just risk more cuts/wasted
+offcuts than necessary. Each curve row's own leftover (once the curve runs
+out but the sheet hasn't) continues flat onto the bottom transition
+instead of stopping cut at the seam (`curveSheetShape`'s `flatExtension`)
+— the flat sheets are clipped to whatever that doesn't already reach, so
+the two butt flush against each other with no gap or overlap. Layer 1
+rendered solid, one shade of green per sheet; layer 2 rendered wireframe
+in red, so both stay distinguishable from each other and from the ribs
+underneath (see status.md) — not the intended final materials.
+
+Layer 2 has its own, independent sheet-size sliders
+(`skinLayer2SheetLength`/`skinLayer2SheetWidth`) and two differences from
+layer 1: its seams are staggered to the midpoint of layer 1's sheets
+(`curveSheetRows`' half-width starter row), and its topmost sheet is
+extended in a straight line along the curve's own tangent direction until
+it touches the coping pipe (`copingTouchExtension`) — see status.md for
+both.
 
 Remaining:
 
-- [ ] Layer 2 — sits on top of layer 1, not yet built or described in detail
-      (its own placement rules, e.g. whether it staggers seams against layer
-      1, haven't been specified).
+- [ ] Layer 2's flat (bottom-transition) sheets aren't staggered against
+      layer 1's flat sheets — only the curved coverage's seams are staggered.
+      Since layer 1's own flat-sheet orientation is itself chosen per-ramp
+      (whichever needs fewer sheets), "the midpoint" isn't a fixed axis to
+      stagger against without first picking a rule for how the two
+      orientation choices interact.
 - [ ] `skinGrainDirection` isn't consumed by any geometry yet — on the curve,
       grain orientation is a hard physical constraint (perpendicular to the
       ribs, so the sheet can bend), not a free choice, so it's unclear where
@@ -53,6 +64,6 @@ Remaining:
       reusing an off-cut from one row as the start of the next) — sheets are
       currently laid out edge-to-edge and clipped, not optimized to minimize
       scrap.
-- [ ] Real final material/rendering (right now every sheet is an arbitrary
-      shade of green, purely to tell sheets apart), once the layout itself
-      is confirmed correct.
+- [ ] Real final material/rendering (right now layer 1 is an arbitrary shade
+      of green and layer 2 is red wireframe, purely to tell sheets and
+      layers apart), once the layout itself is confirmed correct.
