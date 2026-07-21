@@ -310,6 +310,11 @@ hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positio
 from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
 `position: absolute` descendants that overflow it.
 
+A "Show bottom transition" checkbox (`#bottom-transition-toggle`, under "Show scale") toggles
+`bottomTransitionGroup.visible` directly, same pattern as the dimensions/scale toggles above —
+`bottomTransitionGroup.clear()` on rebuild only removes children, it doesn't reset the group's
+own `.visible`, so the hidden/shown state survives param changes without re-wiring.
+
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
 per transition/deck lip (steel-pipe gray, metalness/roughness material), one per side — a
