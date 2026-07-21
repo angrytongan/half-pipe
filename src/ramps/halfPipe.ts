@@ -182,7 +182,13 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
  * half of each boundary joist's thickness at either end (see `curveStartAngle`/`curveEndAngle`
  * below) — the coping notch's own shelf point, and the end of the floor
  * section (deck's outer edge, the ramp's own outer edge — the
- * rib's outline terminates exactly there, with no inset, unlike the bottom-corner end). No
+ * rib's outline terminates exactly there, with no inset, unlike the bottom-corner end), and a
+ * ground-level joist directly beneath the deck-outer one — the rib's own 7th, closing side
+ * (deck outer edge straight down to true ground, drawn purely to close the shape for extrusion,
+ * see `halfPipeOutline` above) is otherwise unjoisted. Flat (angle 0) and ground-touching, same
+ * `y = 0` to `jointDepth` span as the bottom-corner joist, just at the deck-outer end's X instead
+ * of the curve's tangent X — and inset by the same `thickness / 2` the deck-outer joist itself
+ * uses, so the two land exactly flush, one stacked on the other. No
  * joist at the deck/curve corner itself (deck start) — tilted to the curve's own tangent there
  * (as steep as `transitionAngleDeg`) while anchored exactly where the flat deck begins, its top
  * face would rise above the deck surface on the deck side of its own centerline, physically
@@ -263,17 +269,23 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
     notch.shelfEnd[1] - (thickness / 2) * Math.sin(notch.shelfAngle),
   ];
 
+  // Ground point directly beneath the deck-outer landmark — the rib outline's own 7th, closing
+  // side (deck outer edge straight down to true ground) that `halfPipeOutline` draws purely to
+  // close the shape for extrusion. Same local y=0 (ground) convention as the bottom corner.
+  const deckGroundPoint: [number, number] = [deckOuter[0], 0];
+
   // Tangent angle at each landmark, matching localPoints below: flat at the bottom corner,
   // rising through the curve, tilted again at the notch's shelf point, flat on the deck floor
   // (0) — see transitionAndDeckPoints for why deckOuter's own point differs from the curve's
-  // own endpoint (deck start, omitted).
-  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter];
-  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0];
-  // The deck-outer landmark is the ramp's own outer edge, where the rib's outline ends flush
-  // (no inset) — so that one joist alone is inset inward by half its own thickness, aligning
-  // its external face with the rib's edge instead of centering the joist on it and sticking
-  // half its thickness out past where the rib actually ends.
-  const inwardInset = localPoints.map((_, i) => (i === localPoints.length - 1 ? thickness / 2 : 0));
+  // own endpoint (deck start, omitted) — and flat again at ground level, directly beneath it.
+  const localPoints: [number, number][] = [[0, 0], ...curveInteriorPoints, shelfLocalPoint, deckOuter, deckGroundPoint];
+  const localAngles: number[] = [0, ...curveInteriorAngles, notch.shelfAngle, 0, 0];
+  // The deck-outer landmark and the new ground joist beneath it are both the ramp's own outer
+  // edge, where the rib's outline ends flush (no inset) — so those two alone are inset inward by
+  // half their own thickness, aligning their external face with the rib's edge instead of
+  // centering the joist on it and sticking half its thickness out past where the rib actually
+  // ends. Using the same inset for both lands them flush, one exactly above the other.
+  const inwardInset = localPoints.map((_, i) => (i >= localPoints.length - 2 ? thickness / 2 : 0));
   const worldJoists: { x: number; y: number; angle: number }[] = [
     ...localPoints.map(([x, y], i) => ({ x: -half - x + inwardInset[i], y: y + jointDepth, angle: -localAngles[i] })),
     ...localPoints.map(([x, y], i) => ({ x: half + x - inwardInset[i], y: y + jointDepth, angle: localAngles[i] })),

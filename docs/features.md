@@ -28,8 +28,6 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Joists
 
-- [ ] A joist needs to be present between two ribs at the bottom rear corner of each rib
-      at ground level.
 - [ ] A joist needs to be present at the half-way point of the width of the rib
       at ground level.
 

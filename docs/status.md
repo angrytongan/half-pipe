@@ -122,10 +122,18 @@ section bay) pair:
   value), the coping notch's own shelf point, and the end of the floor
   section (the deck's outer edge, the ramp's own outer edge — the rib's
   outline terminates exactly there, with no inset, unlike the
-  bottom-corner end, so that one joist alone is inset inward by half its
-  own thickness, aligning its external face with the rib's edge instead
-  of centering the joist there and sticking half its thickness out past
-  where the rib actually ends). No joist at the deck/curve corner itself
+  bottom-corner end), and a ground-level joist directly beneath that
+  deck-outer one — the rib outline's own 7th, closing side (deck outer
+  edge straight down to true ground, drawn purely to close the shape for
+  extrusion — see `halfPipeOutline`) is otherwise unjoisted. Flat and
+  ground-touching (`y = 0` to `jointDepth`), the same span as the
+  bottom-corner joist, just at the deck-outer end's X instead of the
+  curve's tangent X. Both the deck-outer joist and this new one beneath
+  it are inset inward by half their own thickness, aligning their
+  external face with the rib's edge instead of centering the joist there
+  and sticking half its thickness out past where the rib actually ends —
+  using the same inset for both lands them exactly flush, one stacked on
+  the other. No joist at the deck/curve corner itself
   (deck start) — tilted to the curve's own tangent there while anchored
   exactly where the flat deck begins, its top face would rise above the
   deck surface, physically intersecting it. The topmost curve joist is
