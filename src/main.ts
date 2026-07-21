@@ -3,7 +3,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   buildBottomTransitionFrame,
   buildHalfPipeJoistsBySection,
-  buildHalfPipeRibs,
+  buildHalfPipeRibsBySection,
   HALF_PIPE_DEFAULTS,
   halfPipeCopingCenters,
   halfPipeFootprint,
@@ -35,7 +35,9 @@ interface RampSpec {
   rampSliders: SliderSpec[];
   copingSliders: SliderSpec[];
   skinSliders: SliderSpec[];
-  buildRibs: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  // Edge ribs (frame the deck edges, stay visible once skinned) vs internal seam ribs (buried
+  // inside the skin, hidden by "Show skin") — see buildHalfPipeRibsBySection.
+  buildRibsBySection: (params: HalfPipeParams) => { edgeRibs: THREE.BufferGeometry[]; internalRibs: THREE.BufferGeometry[] };
   // Curve joists (under the curved/vert surface, hidden by "Show skin") vs deck joists (under
   // the flat deck/ground, always visible) — see buildHalfPipeJoistsBySection.
   buildJoistsBySection: (params: HalfPipeParams) => { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] };
@@ -84,7 +86,7 @@ const RAMP: RampSpec = {
     { key: "deckLength", label: "Deck length (m)", min: 0.3, max: 1.5, step: 0.1 },
     { key: "width", label: "Width (m)", min: 1, max: 4, step: 0.1 },
   ],
-  buildRibs: buildHalfPipeRibs,
+  buildRibsBySection: buildHalfPipeRibsBySection,
   buildJoistsBySection: buildHalfPipeJoistsBySection,
   buildBottomTransitionFrame: buildBottomTransitionFrame,
   copingCenters: halfPipeCopingCenters,
@@ -164,8 +166,12 @@ const material = new THREE.MeshStandardMaterial({
   flatShading: true,
   side: THREE.DoubleSide, // ponytail: sidesteps verifying triangle winding on the hand-built ramp outlines
 });
-const rampGroup = new THREE.Group();
-scene.add(rampGroup);
+// Split so "Show skin" can hide the internal seam ribs (buried inside the skin) while leaving
+// the edge ribs (still visible, wrapped by the skin) visible either way.
+const edgeRibGroup = new THREE.Group();
+scene.add(edgeRibGroup);
+const internalRibGroup = new THREE.Group();
+scene.add(internalRibGroup);
 
 const joistMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a876, flatShading: true }); // wood-toned, distinct from the ribs
 // Split so "Show skin" can hide the curve joists (under the surface a skin would cover) while
@@ -395,14 +401,24 @@ function renderSpaceStatus(): void {
 }
 
 function rebuildRamp(): void {
-  for (const child of rampGroup.children) {
+  for (const child of edgeRibGroup.children) {
     if (child instanceof THREE.Mesh) child.geometry.dispose();
   }
-  rampGroup.clear();
-  for (const geometry of RAMP.buildRibs(currentParams)) {
+  edgeRibGroup.clear();
+  for (const child of internalRibGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  internalRibGroup.clear();
+  const { edgeRibs, internalRibs } = RAMP.buildRibsBySection(currentParams);
+  for (const geometry of edgeRibs) {
     const rib = new THREE.Mesh(geometry, material);
     rib.castShadow = true;
-    rampGroup.add(rib);
+    edgeRibGroup.add(rib);
+  }
+  for (const geometry of internalRibs) {
+    const rib = new THREE.Mesh(geometry, material);
+    rib.castShadow = true;
+    internalRibGroup.add(rib);
   }
 
   for (const child of curveJoistGroup.children) {
@@ -561,6 +577,7 @@ skinToggle.addEventListener("input", () => {
   const showSkin = skinToggle.checked;
   bottomTransitionGroup.visible = !showSkin;
   curveJoistGroup.visible = !showSkin;
+  internalRibGroup.visible = !showSkin;
   skinGroup.visible = showSkin;
 });
 skinGrainDirectionEl.addEventListener("change", () => {

@@ -48,9 +48,12 @@ unit for a plywood thickness — converted to meters only where it feeds
 `THREE.ExtrudeGeometry`/`ribZPositions`. `ribs.ts`'s `RIB_THICKNESS_MM` is
 the constant this slider default comes from — `ribZPositions`/`extrudeRibs`
 themselves take count/thickness as parameters, not module constants, so
-they're fully driven by the sliders. `src/main.ts` renders one
-`THREE.Mesh` per rib geometry inside a `THREE.Group` (`rampGroup`),
-sharing the existing ramp material.
+they're fully driven by the sliders. `buildHalfPipeRibsBySection` splits the same ribs into
+`edgeRibs` (the two mandatory ones — always the first/last of `ribZPositions`' output, still
+visible once skinned since the skin wraps around them) and `internalRibs` (the seam ribs,
+buried inside the skin); `src/main.ts` renders each into its own `THREE.Group`
+(`edgeRibGroup`/`internalRibGroup`, both sharing the existing ramp material) so "Show skin" can
+hide the latter without touching the former — see Scene below.
 
 The transition curve's bottom tangent point sits on top of the bottom
 transition's own framing, not on the raw ground: `halfPipeOutline` shifts
@@ -344,14 +347,16 @@ hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positio
 from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
 `position: absolute` descendants that overflow it.
 
-A "Show skin" checkbox (`#skin-toggle`, under "Show scale", unchecked by default) toggles three
-groups at once: checking it hides `bottomTransitionGroup` and `curveJoistGroup` (structure a skin
-would cover) and shows `skinGroup` — same direct-`.visible` pattern as the dimensions/scale
-toggles above, so the hidden/shown state survives param changes without re-wiring.
-`deckJoistGroup` isn't touched either way — the deck/ground joists stay visible regardless.
-`skinGroup` exists (empty, `.visible = false` initially) as the future home for skin geometry —
-not built yet (see Skin above), so checking "Show skin" today only hides structure, and renders
-nothing in its place.
+A "Show skin" checkbox (`#skin-toggle`, under "Show scale", unchecked by default) toggles four
+groups at once: checking it hides `bottomTransitionGroup`, `curveJoistGroup`, and
+`internalRibGroup` (structure a skin would cover or bury) and shows `skinGroup` — same
+direct-`.visible` pattern as the dimensions/scale toggles above, so the hidden/shown state
+survives param changes without re-wiring. `deckJoistGroup` and `edgeRibGroup` aren't touched
+either way — the deck/ground joists and the two mandatory edge ribs stay visible regardless (the
+edge ribs still show through/around a skin, they're not buried by it). `skinGroup` exists
+(empty, `.visible = false` initially) as the future home for skin geometry — not built yet (see
+Skin above), so checking "Show skin" today only hides structure, and renders nothing in its
+place.
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)

@@ -148,6 +148,23 @@ export function buildHalfPipeRibs(params: HalfPipeParams): THREE.BufferGeometry[
 }
 
 /**
+ * Same ribs as `buildHalfPipeRibs`, split into the two mandatory edge ribs (frame the deck
+ * edges — still visible once skinned, since the skin wraps around them) and the
+ * `internalRibCount`-driven seam ribs (buried inside the skin, hidden by the "Show skin"
+ * toggle). `ribZPositions` always returns edge-then-internal-then-edge, so the first and last
+ * entries are the edges and everything between is internal.
+ */
+export function buildHalfPipeRibsBySection(params: HalfPipeParams): { edgeRibs: THREE.BufferGeometry[]; internalRibs: THREE.BufferGeometry[] } {
+  const shape = halfPipeOutline(params);
+  const ribThickness = params.ribThicknessMm / 1000;
+  const positions = ribZPositions(params.width, params.internalRibCount, ribThickness);
+  return {
+    edgeRibs: extrudeRibs(shape, [positions[0], positions[positions.length - 1]], ribThickness),
+    internalRibs: extrudeRibs(shape, positions.slice(1, -1), ribThickness),
+  };
+}
+
+/**
  * The bottom transition's own framing: a stud wall lying on the ground — not a rib, a
  * separate structural piece screwed to the curved transition sections (see research/design.md's
  * "Half-pipe as a special case of quarter-pipe": the bottom transition's framing is the one

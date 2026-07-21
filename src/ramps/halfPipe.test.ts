@@ -6,6 +6,7 @@ import {
   buildHalfPipeJoists,
   buildHalfPipeJoistsBySection,
   buildHalfPipeRibs,
+  buildHalfPipeRibsBySection,
   curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
   halfPipeFootprint,
@@ -133,6 +134,43 @@ describe("buildHalfPipeRibs", () => {
   it("doubles each seam into two adjacent ribs, one per build section", () => {
     const ribs = buildHalfPipeRibs({ ...HALF_PIPE_DEFAULTS, internalRibCount: 1 });
     expect(ribs).toHaveLength(4); // 2 edges + 1 doubled seam
+  });
+});
+
+describe("buildHalfPipeRibsBySection", () => {
+  it("splits the same ribs buildHalfPipeRibs returns into edgeRibs + internalRibs, with no overlap", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalRibCount: 2 };
+    const { edgeRibs, internalRibs } = buildHalfPipeRibsBySection(params);
+    expect(edgeRibs.length + internalRibs.length).toBe(buildHalfPipeRibs(params).length);
+  });
+
+  it("always puts exactly 2 ribs in edgeRibs, regardless of internalRibCount", () => {
+    expect(buildHalfPipeRibsBySection({ ...HALF_PIPE_DEFAULTS, internalRibCount: 0 }).edgeRibs).toHaveLength(2);
+    expect(buildHalfPipeRibsBySection({ ...HALF_PIPE_DEFAULTS, internalRibCount: 5 }).edgeRibs).toHaveLength(2);
+  });
+
+  it("puts 2 ribs per seam in internalRibs", () => {
+    const { internalRibs } = buildHalfPipeRibsBySection({ ...HALF_PIPE_DEFAULTS, internalRibCount: 3 });
+    expect(internalRibs).toHaveLength(6);
+  });
+
+  it("edgeRibs sit at the outermost Z positions, internalRibs at the rest", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalRibCount: 2, width: 3.7 };
+    const positions = ribZPositions(params.width, params.internalRibCount, params.ribThicknessMm / 1000);
+    const { edgeRibs, internalRibs } = buildHalfPipeRibsBySection(params);
+
+    const zOf = (rib: THREE.BufferGeometry): number => {
+      rib.computeBoundingBox();
+      const box = rib.boundingBox!;
+      return (box.min.z + box.max.z) / 2;
+    };
+    const expectedEdgeZs = [positions[0], positions[positions.length - 1]].sort((a, b) => a - b);
+    const actualEdgeZs = edgeRibs.map(zOf).sort((a, b) => a - b);
+    actualEdgeZs.forEach((z, i) => expect(z).toBeCloseTo(expectedEdgeZs[i], 5));
+
+    const expectedInternalZs = positions.slice(1, -1).sort((a, b) => a - b);
+    const actualInternalZs = internalRibs.map(zOf).sort((a, b) => a - b);
+    actualInternalZs.forEach((z, i) => expect(z).toBeCloseTo(expectedInternalZs[i], 5));
   });
 });
 
