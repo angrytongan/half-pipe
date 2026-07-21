@@ -11,15 +11,19 @@ export interface CopingNotch {
  * Notch cut into the rib at the deck/curve corner (points[points.length - 2], see
  * transitionAndDeckPoints) so the coping pipe sits with its center offset such that it
  * protrudes horizontalProtrusion past the corner's own X and verticalProtrusion above the
- * deck's own Y (see research/coping.md). Two straight cuts, as it'd actually be built: a
- * plumb wall and a horizontal shelf, both tangent to the pipe — the wall sits wherever the
- * pipe's own rear (deck-facing) side ends up, not at the corner's own X directly, since the
- * pipe (much bigger than the protrusion specs) mostly sits recessed back under the deck; a
- * wall fixed at the corner would cut straight through it instead of meeting its rear face.
- * The shelf meets the curve wherever the curve's own arc reaches shelf height — solved
- * exactly (asin/acos, not the wall's own straight-line direction) since the notch is small
- * enough relative to the curve's radius that a straight-line approximation would be off by a
- * fraction of a millimeter, comparable to the protrusion spec itself.
+ * deck's own *top surface* — `deckThickness` above the bare corner point, not the corner
+ * point itself, since the deck (see `buildHalfPipeDeck`) is a real board sitting on top of
+ * the joists there, not a zero-thickness line (see research/coping.md). Two straight cuts, as
+ * it'd actually be built: a plumb wall and a horizontal shelf, both tangent to the pipe — the
+ * wall sits wherever the pipe's own rear (deck-facing) side ends up, not at the corner's own X
+ * directly, since the pipe (much bigger than the protrusion specs) mostly sits recessed back
+ * under the deck; a wall fixed at the corner would cut straight through it instead of meeting
+ * its rear face. The shelf meets the curve wherever the curve's own arc reaches shelf height —
+ * solved exactly (asin/acos, not the wall's own straight-line direction) since the notch is
+ * small enough relative to the curve's radius that a straight-line approximation would be off
+ * by a fraction of a millimeter, comparable to the protrusion spec itself. `wallTop` still
+ * anchors to the bare corner's own Y, not the deck's top surface — repositioning the wall
+ * (the notch's *vertical* cut) is a separate, not-yet-done step (see features.md).
  */
 export function copingNotch(
   points: [number, number][],
@@ -27,10 +31,12 @@ export function copingNotch(
   pipeRadius: number,
   horizontalProtrusion: number,
   verticalProtrusion: number,
+  deckThickness: number,
 ): CopingNotch {
   const [cornerX, cornerY] = points[points.length - 2];
+  const deckTopY = cornerY + deckThickness; // the deck board's own top surface — see buildHalfPipeDeck
   const pipeCenterX = cornerX - horizontalProtrusion + pipeRadius;
-  const pipeCenterY = cornerY + verticalProtrusion - pipeRadius;
+  const pipeCenterY = deckTopY + verticalProtrusion - pipeRadius;
   const wallX = pipeCenterX + pipeRadius; // tangent to the pipe's rear (deck-facing) side
   const shelfY = pipeCenterY - pipeRadius; // tangent to the pipe's underside
 

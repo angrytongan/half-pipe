@@ -83,6 +83,7 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
     vertHeight,
     deckLength,
     bottomTransitionLength,
+    ribThicknessMm,
     joistDepthMm,
     joistThicknessMm,
     copingOdMm,
@@ -99,6 +100,7 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
   );
 
   const mapWith = (mirrorX: (x: number) => number) => ([x, y]: [number, number]): [number, number] => [mirrorX(x), y + jointDepth];
@@ -219,7 +221,7 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
  * from the same geometry instead of re-deriving this angle math.
  */
 export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: [number, number]; angle: number }[] {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, joistThicknessMm, internalCurveJoistCount, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm } = params;
+  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, joistThicknessMm, internalCurveJoistCount, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm } = params;
   const thickness = joistThicknessMm / 1000;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const notch = copingNotch(
@@ -228,6 +230,7 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
   );
   const edgeAngle = thickness / 2 / radius;
   const curveStartAngle = edgeAngle;
@@ -328,6 +331,7 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
   );
 
   const curveInterior = curveInteriorJoistLocalPoints(params);
@@ -436,6 +440,7 @@ export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
   );
   const [wallX] = notch.wallTop;
   const deckTopOfJoistsY = deckOuter[1] + jointDepth; // the deck joists' own top face / the rib's own drawn deck line
@@ -466,6 +471,7 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
     vertHeight,
     deckLength,
     bottomTransitionLength,
+    ribThicknessMm,
     joistDepthMm,
     copingOdMm,
     copingHorizontalProtrusionMm,
@@ -480,6 +486,7 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
     copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
   );
   const [cx, cy] = notch.pipeCenter;
   const y = cy + jointDepth;

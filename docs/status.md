@@ -236,7 +236,12 @@ corner (see `research/coping.md` for the pipe stock and required protrusions it'
 from) — two straight cuts, as it'd actually be built: a plumb wall and a horizontal shelf,
 both tangent to the pipe (not the wall fixed at the corner's own X — the pipe is much bigger
 than the protrusion specs, so it sits mostly recessed back under the deck, and a wall fixed at
-the corner would cut straight through it instead of meeting its rear face). The shelf's far
+the corner would cut straight through it instead of meeting its rear face). `copingVerticalProtrusionMm`
+(and so the shelf it produces) is measured from the deck board's own top surface — a
+`deckThickness` parameter added once `buildHalfPipeDeck` gave that surface an actual thickness
+to measure from (`cornerY + deckThickness`, not the bare rib corner point) — while `wallTop`
+still anchors to that bare corner point directly, unrepositioned; see features.md's Coping
+entry for that remaining half of the fix. The shelf's far
 end is found where the transition arc itself reaches shelf height, via an exact `acos`/`sin`
 circle intersection rather than the wall's tangent-line direction — at this radius/notch-size
 ratio a straight-line approximation would be off by a fraction of a millimeter, comparable to

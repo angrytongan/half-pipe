@@ -18,13 +18,14 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Coping
 
-- [ ] Reposition the notch's vertical cut once the ramp's actual riding
-      surface (the skin — see "Construction / BOM" above, not yet
-      modeled) is defined. `copingNotch` (`src/ramps/coping.ts`) currently
-      derives the wall's X from the pipe's own tangent point, which in
-      turn measures `copingHorizontalProtrusionMm` against the bare rib's
-      own corner point (`points[points.length - 2]` from
-      `transitionAndDeckPoints`) — a stand-in for where the finished ramp
-      surface will actually sit, since that surface doesn't exist yet.
-      The horizontal cut (shelf) is confirmed correct as-is; only the
-      vertical cut needs revisiting once the ramp surface is modeled.
+- [ ] Reposition the notch's vertical cut (the wall) to start from the
+      deck's actual top surface too. `copingNotch` (`src/ramps/coping.ts`)
+      now measures `copingVerticalProtrusionMm` — and so the horizontal
+      cut (the shelf) it produces — from the deck board's real top surface
+      (`cornerY + deckThickness`, see `buildHalfPipeDeck`), but `wallTop`
+      still anchors to the bare rib corner's own Y (`points[points.length -
+      2]` from `transitionAndDeckPoints`) instead, so the wall's top
+      currently sits `deckThickness` below where the deck board actually
+      is. `wallX` itself (the wall's X position, from
+      `copingHorizontalProtrusionMm`) is unaffected either way — it's a
+      pure X measurement the deck's thickness doesn't enter into.
