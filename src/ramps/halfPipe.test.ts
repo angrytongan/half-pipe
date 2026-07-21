@@ -188,6 +188,7 @@ describe("buildHalfPipeRibs coping notch", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const wallBottomWorld = { x: half + notch.wallBottom[0], y: notch.wallBottom[1] + jointDepth };
     const shelfEndWorld = { x: half + notch.shelfEnd[0], y: notch.shelfEnd[1] + jointDepth };
@@ -356,6 +357,7 @@ describe("buildHalfPipeJoists", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const edgeAngle = thickness / 2 / params.radius;
     const curveStartAngle = edgeAngle;
@@ -406,6 +408,7 @@ describe("buildHalfPipeJoists", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const edgeAngle = thickness / 2 / params.radius;
     const curveStartAngle = edgeAngle; // bottom-most joist's inside edge
@@ -457,6 +460,7 @@ describe("buildHalfPipeJoists", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const angle = notch.shelfAngle;
     // Inset backward along the tangent by half the thickness — see buildHalfPipeJoists — so the
@@ -502,6 +506,7 @@ describe("buildHalfPipeJoists", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const [shelfX, shelfY] = notch.shelfEnd;
     const worldY = shelfY + jointDepth;
@@ -664,6 +669,7 @@ describe("buildHalfPipeJoistsBySection", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const [wallX, wallY] = notch.wallTop;
     const wallWorldY = wallY + jointDepth;
@@ -714,6 +720,7 @@ describe("buildHalfPipeDeck", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const [wallX] = notch.wallTop;
 
@@ -805,6 +812,7 @@ describe("halfPipeCopingCenters", () => {
       params.copingHorizontalProtrusionMm / 1000,
       params.copingVerticalProtrusionMm / 1000,
       params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
     );
     const [cx, cy] = notch.pipeCenter;
     const expectedY = cy + jointDepth;

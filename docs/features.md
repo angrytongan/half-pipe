@@ -18,14 +18,18 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
 
 ## Coping
 
-- [ ] Reposition the notch's vertical cut (the wall) to start from the
-      deck's actual top surface too. `copingNotch` (`src/ramps/coping.ts`)
-      now measures `copingVerticalProtrusionMm` — and so the horizontal
-      cut (the shelf) it produces — from the deck board's real top surface
-      (`cornerY + deckThickness`, see `buildHalfPipeDeck`), but `wallTop`
-      still anchors to the bare rib corner's own Y (`points[points.length -
-      2]` from `transitionAndDeckPoints`) instead, so the wall's top
-      currently sits `deckThickness` below where the deck board actually
-      is. `wallX` itself (the wall's X position, from
-      `copingHorizontalProtrusionMm`) is unaffected either way — it's a
-      pure X measurement the deck's thickness doesn't enter into.
+- [ ] Reposition `wallTop`'s Y to start from the deck's actual top surface
+      too. `copingNotch` (`src/ramps/coping.ts`) now measures both
+      protrusion specs from the covered surface rather than the bare rib:
+      `copingVerticalProtrusionMm` (and so the shelf) from the deck
+      board's real top surface (`cornerY + deckThickness`, see
+      `buildHalfPipeDeck`), and `copingHorizontalProtrusionMm` (and so
+      the wall's X, `wallX`/`pipeCenterX`) from the skinned curve's own
+      surface (`cornerX - skinThickness`, `skinLayer1ThicknessMm +
+      skinLayer2ThicknessMm` — subtracted, since the curve's rideable side
+      faces the ramp's interior/smaller X at this corner, the opposite
+      sign from the deck's own `+deckThickness`). `wallTop`'s Y is the one piece still
+      unrepositioned — it anchors directly to the bare rib corner's own Y
+      (`points[points.length - 2]` from `transitionAndDeckPoints`) rather
+      than `cornerY + deckThickness`, so the wall's top currently sits
+      `deckThickness` below where the deck board actually is.

@@ -236,12 +236,21 @@ corner (see `research/coping.md` for the pipe stock and required protrusions it'
 from) — two straight cuts, as it'd actually be built: a plumb wall and a horizontal shelf,
 both tangent to the pipe (not the wall fixed at the corner's own X — the pipe is much bigger
 than the protrusion specs, so it sits mostly recessed back under the deck, and a wall fixed at
-the corner would cut straight through it instead of meeting its rear face). `copingVerticalProtrusionMm`
-(and so the shelf it produces) is measured from the deck board's own top surface — a
-`deckThickness` parameter added once `buildHalfPipeDeck` gave that surface an actual thickness
-to measure from (`cornerY + deckThickness`, not the bare rib corner point) — while `wallTop`
-still anchors to that bare corner point directly, unrepositioned; see features.md's Coping
-entry for that remaining half of the fix. The shelf's far
+the corner would cut straight through it instead of meeting its rear face). Neither protrusion
+spec is measured against the bare rib corner point anymore: `copingVerticalProtrusionMm` (and
+so the shelf it produces) is measured from the deck board's own top surface — a `deckThickness`
+parameter added once `buildHalfPipeDeck` gave that surface an actual thickness to measure from
+(`cornerY + deckThickness`, *added* since the deck's rideable side faces up) — and
+`copingHorizontalProtrusionMm` (and so the wall's X, `wallX`/`pipeCenterX`) is likewise measured
+from the *skinned* curve surface, a `skinThickness` parameter (`skinLayer1ThicknessMm +
+skinLayer2ThicknessMm`, the two layers laid onto the rib on the curve) — but *subtracted*:
+`cornerX - skinThickness`, not `+`. The curve's rideable (concave) side faces its arc's own
+center, which at this corner is toward *smaller* X (the ramp's interior) — the same direction
+the pipe already protrudes past the corner — not toward the deck side (+X) the way the naive
+"same sign as the deck" version first got it. `wallTop`'s Y still anchors to the bare corner
+point directly, though — that's the one piece of "measure from the covered surface, not the
+bare rib" left unrepositioned; see features.md's Coping entry.
+The shelf's far
 end is found where the transition arc itself reaches shelf height, via an exact `acos`/`sin`
 circle intersection rather than the wall's tangent-line direction — at this radius/notch-size
 ratio a straight-line approximation would be off by a fraction of a millimeter, comparable to
