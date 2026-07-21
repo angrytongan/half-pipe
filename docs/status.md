@@ -122,10 +122,22 @@ section bay) pair:
   value), the coping notch's own shelf point, and the end of the floor
   section (the deck's outer edge, the ramp's own outer edge — the rib's
   outline terminates exactly there, with no inset, unlike the
-  bottom-corner end, so that one joist alone is inset inward by half its
-  own thickness, aligning its external face with the rib's edge instead
-  of centering the joist there and sticking half its thickness out past
-  where the rib actually ends). No joist at the deck/curve corner itself
+  bottom-corner end), and a ground-level joist directly beneath that
+  deck-outer one — the rib outline's own 7th, closing side (deck outer
+  edge straight down to true ground, drawn purely to close the shape for
+  extrusion — see `halfPipeOutline`) is otherwise unjoisted. Flat and
+  ground-touching (`y = 0` to `jointDepth`), the same span as the
+  bottom-corner joist, just at the deck-outer end's X instead of the
+  curve's tangent X. Both the deck-outer joist and this new one beneath
+  it are inset inward by half their own thickness, aligning their
+  external face with the rib's edge instead of centering the joist there
+  and sticking half its thickness out past where the rib actually ends —
+  using the same inset for both lands them exactly flush, one stacked on
+  the other. A third ground-level joist sits at the centerline midpoint
+  (by X) between the bottom-corner and deck-outer-ground joists — the
+  rib's own ground-level base is a flat line the whole way between those
+  two, so this one is flat too, just centered on its own anchor rather
+  than inset to an edge. No joist at the deck/curve corner itself
   (deck start) — tilted to the curve's own tangent there while anchored
   exactly where the flat deck begins, its top face would rise above the
   deck surface, physically intersecting it. The topmost curve joist is
@@ -224,10 +236,10 @@ lines, an offset dimension line with arrowheads, and returns a label position; `
 copies `../obstacle`'s canvas-texture label-sprite approach (`createLabelSprite`) to render
 the text, camera-facing, with no separate DOM overlay to get out of sync.
 
-`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes six dimensions
-analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingCenters`
-— no need to build the actual rib geometry just to measure it), all anchored to one edge rib
-since every rib is an identical copy of the others:
+`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes up to seven
+dimensions analytically from `HalfPipeParams` (same approach as
+`halfPipeFootprint`/`halfPipeCopingCenters` — no need to build the actual rib geometry just to
+measure it), all anchored to one edge rib since every rib is an identical copy of the others:
 
 - **Height** and **overall length** of one rib (ground to deck; deck to deck) — offset to
   opposite sides (+Z/−Z) of the left edge rib.
@@ -256,6 +268,15 @@ since every rib is an identical copy of the others:
   already covers that). Drawn on the ground, on the same +Z side as the bottom transition
   length dimension and chained off it (its start sits right next to the bottom transition's
   own edge), rather than at deck height on the opposite side.
+- **Curve-joist spacing** — chord (straight-line) distance between the anchor points of the
+  first two `internalCurveJoistCount` interior curve joists, reusing
+  `curveInteriorJoistLocalPoints` (extracted from `buildHalfPipeJoists` in
+  `src/ramps/halfPipe.ts` so both share the same angle math instead of duplicating it). Every
+  curve-joist gap is congruent — equal angular steps on a circular arc — so only the first
+  pair is dimensioned, same "one representative gap" convention as rib spacing above. Drawn at
+  the opposite edge (−Z) from the bottom transition/rib width dimensions, offset further
+  outward past the ramp. Omitted entirely when `internalCurveJoistCount` is below 2 (no pair
+  of interior joists to measure).
 
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.
@@ -301,6 +322,11 @@ inside the label re-triggers the checkbox on click) shows a tooltip with each fi
 hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positionScaleTooltip`)
 from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
 `position: absolute` descendants that overflow it.
+
+A "Show bottom transition" checkbox (`#bottom-transition-toggle`, under "Show scale") toggles
+`bottomTransitionGroup.visible` directly, same pattern as the dimensions/scale toggles above —
+`bottomTransitionGroup.clear()` on rebuild only removes children, it doesn't reset the group's
+own `.visible`, so the hidden/shown state survives param changes without re-wiring.
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)

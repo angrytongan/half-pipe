@@ -107,6 +107,7 @@ const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
 const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
 const scaleToggle = document.getElementById("scale-toggle") as HTMLInputElement;
+const bottomTransitionToggle = document.getElementById("bottom-transition-toggle") as HTMLInputElement;
 const themeToggle = document.getElementById("theme-toggle")!;
 const aboutBtn = document.getElementById("about-btn")!;
 const aboutCloseBtn = document.getElementById("about-close-btn")!;
@@ -521,6 +522,9 @@ dimensionsToggle.addEventListener("input", () => {
 scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
+});
+bottomTransitionToggle.addEventListener("input", () => {
+  bottomTransitionGroup.visible = bottomTransitionToggle.checked;
 });
 
 // Tooltip is position: fixed to escape #panel's overflow clipping, so its screen position has to be computed in JS rather than via CSS anchoring to an ancestor.

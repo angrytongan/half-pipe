@@ -2,26 +2,6 @@
 
 Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for the scope/design reasoning behind an item before starting it. When an item is built, remove it from here and describe it in [status.md](status.md) instead.
 
-## Interface
-
-- [ ] Add an information icon next to the application name in the header, that
-      when clicked opens up a modal explaining what this application is.
-- [ ] Include two human billboards, one adult height, one child height. This
-      help provide the user with an idea of scale. Position them off the ramp
-      halfway along the length of the bottom transition.
-
-### Controls 
-
-Do this section in order:
-
-- [ ] Move the camera closer to the ramp on page load.
-- [ ] Move control "Width" from "Ramp transition" to "Ramp parameters".
-
-## Available space
-
-- [ ] Change the terrain size to the available space dimensions length and
-      width to give the user feedback as to how large the ramp is.
-
 ## Construction / BOM
 
 - [ ] Construction methods (plywood/OSB skin over a framed rib structure —
@@ -35,23 +15,6 @@ Do this section in order:
 - [ ] An angular-dimension variant for `transitionAngleDeg` — none of
       `obstacle`'s dimension code has this either, and `buildLinearDimension`
       only handles straight measurements.
-
-- [ ] We need a dimension line showing the distance between the midpoint of two
-      joists in a straight line. Candidate plan (deferred, not yet built):
-      chord distance between the bottom-corner curve joist and the topmost
-      (shelf) curve joist — the two boundary joists that are always present
-      regardless of `internalCurveJoistCount` — reusing `buildLinearDimension`
-      the same way `halfPipeDimensions.ts`'s other dimensions do. Would need
-      extracting the inline `shelfLocalPoint` calc out of
-      `buildHalfPipeJoists` (`src/ramps/halfPipe.ts`) into a shared helper
-      first, to avoid duplicating that geometry math.
-
-## Joists
-
-- [ ] A joist needs to be present between two ribs at the bottom rear corner of each rib
-      at ground level.
-- [ ] A joist needs to be present at the half-way point of the width of the rib
-      at ground level.
 
 ## Coping
 
