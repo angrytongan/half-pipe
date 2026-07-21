@@ -293,13 +293,12 @@ on load/undo/redo/reset.
 
 `src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's full coverage —
 curved sheets up the transition plus flat sheets filling in the bottom transition; no layer 2
-yet (see features.md). Rendered wireframe-only (`THREE.LineSegments` + `EdgesGeometry`, not
-solid `Mesh`, in `skinGroup`) since this is for visually checking sheet placement, not final
-rendering; toggled by "Show skin" like the rest of that group. `EdgesGeometry` is given a high
-threshold angle (20°, `main.ts`) so it draws each sheet's real silhouette only — its corners are
-far sharper than that — and drops the shallow-angle seams between the curve's own internal arc
-facets (`SHEET_ARC_SEGMENTS`, skin.ts), which would otherwise clutter the wireframe with lines
-that aren't real sheet edges.
+yet (see features.md). Rendered solid (`skinGroup` in `main.ts`), one `MeshStandardMaterial` per
+sheet, all the same green hue (`SKIN_HUE`) but a different lightness each (`0.25` to `0.75`,
+spread evenly across however many sheets there are) so individual sheets are distinguishable —
+not because it's the intended final material. `side: THREE.DoubleSide`, same as the rib material
+— the left side's sheets are built by mirroring (`geometry.scale(-1,1,1)`), which flips winding
+without correcting it. Toggled by "Show skin" like the rest of that group.
 
 **Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
 arcs sharing the transition's own center — the outer edge exactly on the transition curve, the

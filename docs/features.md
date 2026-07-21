@@ -36,9 +36,9 @@ own leftover (once the curve runs out but the sheet hasn't) continues flat
 onto the bottom transition instead of stopping cut at the seam
 (`curveSheetShape`'s `flatExtension`) — the flat sheets are clipped to
 whatever that doesn't already reach, so the two butt flush against each
-other with no gap or overlap. Rendered wireframe (each sheet's real
-outline only, not its internal curve-approximation facets — see
-status.md), to check placement, not as final geometry/material.
+other with no gap or overlap. Rendered solid, one shade of green per
+sheet, to check placement — not the intended final material (see
+status.md).
 
 Remaining:
 
@@ -53,5 +53,6 @@ Remaining:
       reusing an off-cut from one row as the start of the next) — sheets are
       currently laid out edge-to-edge and clipped, not optimized to minimize
       scrap.
-- [ ] Real final material/rendering (right now it's wireframe, purely to
-      check placement), once the layout itself is confirmed correct.
+- [ ] Real final material/rendering (right now every sheet is an arbitrary
+      shade of green, purely to tell sheets apart), once the layout itself
+      is confirmed correct.
