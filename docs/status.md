@@ -285,12 +285,16 @@ ground) and `skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm ra
 0.6–1.5m, default 2.4m/1.2m each — a standard "8×4" sheet); and a `skinGrainDirection` select
 (`"length-ways"` default / `"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way
 a sheet is laid relative to the ribs — length-ways runs the sheet's major axis perpendicular to
-the ribs (bending across the minor axis), width-ways the reverse; not yet consumed by any
-geometry (see features.md). All are `HalfPipeParams` fields like everywhere else, so undo/redo
-and "Reset to defaults" already cover them for free. The select is wired by hand in `main.ts`
-rather than through `renderSliderList` (that helper is number-only) — its `change` listener
-records an undo snapshot the same way `resetParams` does, and `renderAllSliderGroups` syncs its
-displayed value from `currentParams` on load/undo/redo/reset.
+the ribs (bending across the minor axis), width-ways the reverse. `disabled` in `index.html`
+(fixed at `"length-ways"`, the only orientation any geometry actually respects) since it's not
+yet consumed by any geometry (see features.md) — kept in the UI so the control's own place is
+still visible, and its meaning documented, for whenever that changes. All are `HalfPipeParams`
+fields like everywhere else, so undo/redo and "Reset to defaults" already cover them for free.
+The select is wired by hand in `main.ts` rather than through `renderSliderList` (that helper is
+number-only) — its `change` listener records an undo snapshot the same way `resetParams` does
+(unreachable while disabled, but left in place rather than removed, in case the control is
+re-enabled later), and `renderAllSliderGroups` syncs its displayed value from `currentParams` on
+load/undo/redo/reset.
 
 `src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1`/`buildHalfPipeSkinLayer2` build
 each layer's full coverage — curved sheets up the transition plus flat sheets filling in the
@@ -299,11 +303,11 @@ per sheet, all the same green hue (`SKIN_HUE`) but a different lightness each (`
 spread evenly across however many sheets there are) so individual sheets are distinguishable —
 not because it's the intended final material. `side: THREE.DoubleSide`, same as the rib material
 — the left side's sheets are built by mirroring (`geometry.scale(-1,1,1)`), which flips winding
-without correcting it. Layer 2 rendered wireframe in red instead (`skinLayer2Group`,
-`EdgesGeometry` with the same 20° threshold angle layer 1's own wireframe used to have, dropping
-the curve's internal arc-facet seams) — kept visually distinct from layer 1's solid green so
-both layers, and how layer 2's seams stagger against layer 1's, stay readable at once. Both
-groups toggle together with "Show skin".
+without correcting it. Layer 2 rendered solid red instead (`skinLayer2Group`, one shared
+`skinLayer2Material`, `transparent: true`/`opacity: 0.5` so layer 1 stays visible underneath
+where they overlap) — kept visually distinct from layer 1's solid green so both layers, and how
+layer 2's seams stagger against layer 1's, stay readable at once. "Show layer 1"/"Show layer 2"
+(see below) toggle their groups independently.
 
 **Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
 arcs sharing the transition's own center — the outer edge at `radius - outerOffset`, the inner
@@ -338,22 +342,34 @@ Empty if that reach alone already covers to the ramp's centerline (`tileCentered
 sheets use its own sheet size and its own `flatExtension`, but aren't staggered against layer
 1's flat sheets — see features.md.
 
-**Layer 2's two differences from layer 1** (both in `buildHalfPipeSkinLayer2`):
-1. *Staggered seams* — `curveSheetRows`' topmost row is half-width
+**Layer 2's differences from layer 1** (all in `buildHalfPipeSkinLayer2`):
+1. *Staggered seams, arc direction* — `curveSheetRows`' topmost row is half-width
    (`skinLayer2SheetWidth / 2`) instead of the full width every row after it uses, so every
    layer-2 seam lands at the midpoint of whichever layer-1 sheet spans it (when both layers
    share the same sheet width — the default) rather than lining up with a layer-1 seam, the
    standard staggered-joint practice. That guarantee only holds for *full* (non-ground-clamped)
    rows — the ground-most row's own real extent is set by where it hits the ground, not by the
    nominal row width, so its "midpoint" isn't the nominal one either.
-2. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
+2. *Staggered seams, width (Z) direction* — `staggeredZColumns` (skin.ts) tiles layer 2's own
+   curve-sheet columns from the ramp's `+width/2` edge instead of layer 1's `-width/2`
+   (`tileFromOppositeEdgeClipped`, built by mirroring `tileFromEdgeClipped`'s own output rather
+   than a separate implementation), so their seams land on different sides even when both
+   layers use the same sheet length. If the ramp's width divides evenly by the sheet length,
+   starting from either edge produces the identical seams — `staggeredZColumns` detects that
+   (any seam coinciding between the two layers) and falls back to an explicit half-sheet-length
+   starter piece for layer 2's columns instead, the same trick `curveSheetRows` uses for the arc
+   direction.
+3. *Touches the coping* — `curveSheetShape`'s `coping` parameter continues the topmost sheet in
    a straight line, along its own tangent direction at the notch, until it reaches the pipe
    (`copingTouchExtension`, an exact line-circle intersection) — a straight-line extension, not
-   a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). The
-   outer and inner edges get their *own* extension distances, computed separately — reusing one
-   edge's distance for the other would either undershoot it or (typically) drive it straight
-   through the pipe, since the two edges start different distances away. The pipe itself isn't
-   repositioned; only this one sheet reaches further to meet it.
+   a curved wrap, consistent with the notch's own wall/shelf simplifications (coping.ts). Both
+   the outer and inner edges extend by the *outer* edge's own distance — the rib/layer-1-contact
+   side, the "bottom" edge (lower world Y than the inner edge at any given t, since it sits at a
+   larger radius from the arc's own center) — that's the edge that actually needs to land
+   tangent to the pipe, not the inner (exposed, "top") edge, so the cut stays a square-edged
+   rectangle rather than a wedge. The inner edge's own tip lands slightly short of, or slightly
+   past, the pipe's actual surface as a result, but that gap/overlap is small enough to be
+   irrelevant. The pipe itself isn't repositioned; only this one sheet reaches further to meet it.
 
 ## Dimension lines
 
@@ -451,16 +467,16 @@ hover/focus. The tooltip itself is `position: fixed`, positioned in JS (`positio
 from the trigger's `getBoundingClientRect()`, since `#panel`'s `overflow-y: auto` clips
 `position: absolute` descendants that overflow it.
 
-A "Show skin" checkbox (`#skin-toggle`, under "Show scale", unchecked by default) toggles four
-groups at once: checking it hides `bottomTransitionGroup`, `curveJoistGroup`, and
-`internalRibGroup` (structure a skin would cover or bury) and shows `skinGroup` — same
-direct-`.visible` pattern as the dimensions/scale toggles above, so the hidden/shown state
-survives param changes without re-wiring. `deckJoistGroup` and `edgeRibGroup` aren't touched
-either way — the deck/ground joists and the two mandatory edge ribs stay visible regardless (the
-edge ribs still show through/around a skin, they're not buried by it). `skinGroup` exists
-(empty, `.visible = false` initially) as the future home for skin geometry — not built yet (see
-Skin above), so checking "Show skin" today only hides structure, and renders nothing in its
-place.
+Two checkboxes, "Show layer 1" (`#skin-layer1-toggle`) and "Show layer 2"
+(`#skin-layer2-toggle`), both under "Show scale" and unchecked by default, replace the old
+single "Show skin" toggle — each hooked up to exactly its own layer (`skinGroup`/
+`skinLayer2Group`), so either can be shown independently to compare them. `updateSkinVisibility`
+(shared by both toggles' `input` listeners) also hides `bottomTransitionGroup`,
+`curveJoistGroup`, and `internalRibGroup` (structure either layer would cover or bury) whenever
+*either* layer is checked — same direct-`.visible` pattern as the dimensions/scale toggles
+above, so the hidden/shown state survives param changes without re-wiring. `deckJoistGroup` and
+`edgeRibGroup` aren't touched either way — the deck/ground joists and the two mandatory edge
+ribs stay visible regardless (they still show through/around a skin, not buried by it).
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
@@ -476,8 +492,12 @@ free — "in development" pill, GitHub link) matching `obstacle`'s header, above
 reset-view button and "Show dimensions" toggle, at the top, then an accordion of seven
 independently-collapsible sections — Available space, Ramp parameters,
 Ribs, Joists, Bottom transition, Coping, Skin, each a plain native
-`<details>`/`<summary>` so no JS is needed — then the reset-to-defaults
-button) and `#viewport` (3D view) cards. Both share a `.card` class
+`<details>`/`<summary>` so no JS is needed, all closed by default on page load (no `open`
+attribute on any of them) — then the reset-to-defaults button) and `#viewport` (3D view) cards.
+The Skin section itself groups its sliders under two `.subsection-label` headings, "Layer 1" and
+"Layer 2", each labeling its own `renderSliderList` container (`skin-layer1-sliders`/
+`skin-layer2-sliders`) — plain, static text, not collapsible on their own. Both share a `.card`
+class
 (border/radius/shadow/opaque background — `var(--card-bg)`); `#viewport`
 additionally hosts a small `.overlay-card` (the space-status pills,
 top-left), positioned absolutely inside it (`position: relative` on

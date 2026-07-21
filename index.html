@@ -230,6 +230,17 @@
       #panel details[open] summary {
         margin-bottom: 0.75rem;
       }
+      .subsection-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        opacity: 0.6;
+        margin: 0.75rem 0 0.5rem;
+      }
+      .subsection-label:first-child {
+        margin-top: 0;
+      }
       #space-status {
         display: flex;
         flex-wrap: wrap;
@@ -322,8 +333,9 @@
           </span>
           <input type="checkbox" id="scale-toggle" checked />
         </div>
-        <label class="toggle-row">Show skin<input type="checkbox" id="skin-toggle" /></label>
-        <details open>
+        <label class="toggle-row">Show layer 1<input type="checkbox" id="skin-layer1-toggle" /></label>
+        <label class="toggle-row">Show layer 2<input type="checkbox" id="skin-layer2-toggle" /></label>
+        <details>
           <summary>Available space</summary>
           <div id="space-sliders"></div>
         </details>
@@ -349,10 +361,13 @@
         </details>
         <details>
           <summary>Skin</summary>
-          <div id="skin-sliders"></div>
+          <div class="subsection-label">Layer 1</div>
+          <div id="skin-layer1-sliders"></div>
+          <div class="subsection-label">Layer 2</div>
+          <div id="skin-layer2-sliders"></div>
           <label class="toggle-row"
             >Grain direction
-            <select id="skin-grain-direction">
+            <select id="skin-grain-direction" disabled>
               <option value="length-ways">Length-ways</option>
               <option value="width-ways">Width-ways</option>
             </select>

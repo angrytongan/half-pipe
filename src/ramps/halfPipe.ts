@@ -4,7 +4,7 @@ import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
-import { buildSkinCurveSheet, buildSkinFlatSheet, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { buildSkinCurveSheet, buildSkinFlatSheet, curveSheetRows, staggeredZColumns, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 /**
  * Which way a plywood sheet is laid relative to the ribs it skins: "length-ways" runs the
@@ -46,9 +46,9 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   radius: 1.8,
   transitionAngleDeg: 57,
   vertHeight: 0,
-  deckLength: 0.3,
-  bottomTransitionLength: 2.25,
-  width: 3,
+  deckLength: 0.6,
+  bottomTransitionLength: 2.4,
+  width: 2.4,
   ribThicknessMm: RIB_THICKNESS_MM,
   internalRibCount: 1,
   joistThicknessMm: JOIST_THICKNESS_MM,
@@ -599,13 +599,19 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
 /**
  * Layer 2's full coverage — same shape as buildHalfPipeSkinLayer1, sitting on top of layer 1
  * (outerOffset = skinLayer1ThicknessMm, so its own outer/contact edge is layer 1's own outer
- * surface, not the bare curve), with two differences from layer 1's design:
+ * surface, not the bare curve), with three differences from layer 1's design:
  *
- * 1. Staggered seams: curveSheetRows' topmost row is half-width (skinLayer2SheetWidth / 2
- *    instead of the full width every other row uses), so every layer-2 seam lands at the
- *    midpoint of whichever layer-1 sheet spans it, rather than lining up with a layer-1 seam —
- *    the usual staggered-joint practice (see curveSheetRows, skin.ts).
- * 2. The topmost sheet touches the coping: curveSheetShape's coping parameter continues that
+ * 1. Staggered seams (arc direction): curveSheetRows' topmost row is half-width
+ *    (skinLayer2SheetWidth / 2 instead of the full width every other row uses), so every
+ *    layer-2 seam lands at the midpoint of whichever layer-1 sheet spans it, rather than lining
+ *    up with a layer-1 seam — the usual staggered-joint practice (see curveSheetRows, skin.ts).
+ * 2. Staggered seams (width/Z direction): staggeredZColumns tiles layer 2's own curve-sheet
+ *    columns from the *opposite* edge of the ramp to layer 1's own columns, so their seams land
+ *    on different sides even when both layers use the same sheet length — falling back to an
+ *    explicit half-sheet-length stagger of its own if the ramp's width divides evenly by the
+ *    sheet length (so starting from either edge would otherwise produce identical seams; see
+ *    skin.ts).
+ * 3. The topmost sheet touches the coping: curveSheetShape's coping parameter continues that
  *    sheet in a straight line, along its own tangent direction at the notch, until its inner
  *    (exposed, rideable-side) edge is tangent to the coping pipe — copingTouchExtension solves
  *    exactly how far that is, separately for each edge (the outer edge needs its own, shorter
@@ -634,6 +640,7 @@ export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeo
     copingVerticalProtrusionMm,
     skinLayer1ThicknessMm,
     skinLayer2ThicknessMm,
+    skinSheetLength,
     skinLayer2SheetWidth,
     skinLayer2SheetLength,
     width,
@@ -665,7 +672,7 @@ export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeo
   const sheets: THREE.BufferGeometry[] = [];
 
   const rows = curveSheetRows(radius, sweep, skinLayer2SheetWidth, skinLayer2SheetWidth / 2);
-  const curveZColumns = tileFromEdgeClipped(width / 2, skinLayer2SheetLength);
+  const curveZColumns = staggeredZColumns(width / 2, skinSheetLength, skinLayer2SheetLength);
   rows.forEach(({ t0, t1, flatExtension }, row) => {
     const coping = row === 0 ? pipeTouch : undefined; // only the row actually reaching the notch
     for (const [zStart, zEnd] of curveZColumns) {

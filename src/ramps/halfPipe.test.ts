@@ -19,7 +19,7 @@ import {
 import { ribZPositions } from "./ribs";
 import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
-import { copingTouchExtension, curveSheetRows, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { copingTouchExtension, curveSheetRows, staggeredZColumns, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -932,11 +932,18 @@ describe("buildHalfPipeSkinLayer2", () => {
     expect(checkedAtLeastOne).toBe(true);
   });
 
-  it("makes the topmost sheet's inner (rideable) edge actually reach the coping pipe's surface", () => {
+  it("makes the topmost sheet's outer (rib-contact, 'bottom') edge actually reach the coping pipe's surface", () => {
     const params = HALF_PIPE_DEFAULTS;
     const half = params.bottomTransitionLength / 2;
     const notch = notchOf(params);
     const pipeRadius = params.copingOdMm / 1000 / 2;
+    const outerOffset = params.skinLayer1ThicknessMm / 1000;
+    const rOuter = params.radius - outerOffset;
+    const sweep = notch.shelfAngle;
+    const outerExtension = copingTouchExtension(params.radius, rOuter, sweep, notch.pipeCenter, pipeRadius);
+    const tangent = [Math.cos(sweep), Math.sin(sweep)];
+    const outerPoint = [rOuter * Math.sin(sweep), params.radius - rOuter * Math.cos(sweep)];
+    const expectedTip = [outerPoint[0] + tangent[0] * outerExtension, outerPoint[1] + tangent[1] * outerExtension];
 
     const sheets = buildHalfPipeSkinLayer2(params);
     for (const geometry of sheets) geometry.computeBoundingBox();
@@ -946,15 +953,18 @@ describe("buildHalfPipeSkinLayer2", () => {
 
     const jointDepth = params.joistDepthMm / 1000;
     const position = topSheet.attributes.position;
-    const distances: number[] = [];
-    const [pcx, pcy] = notch.pipeCenter;
+    let found = false;
     for (let i = 0; i < position.count; i++) {
       const x = position.getX(i) - half;
       const y = position.getY(i) - jointDepth;
-      distances.push(Math.sqrt((x - pcx) ** 2 + (y - pcy) ** 2));
+      if (Math.abs(x - expectedTip[0]) < 1e-4 && Math.abs(y - expectedTip[1]) < 1e-4) {
+        found = true;
+        break;
+      }
     }
-    // some vertex of the extended tip lands exactly on the pipe's own surface
-    expect(Math.min(...distances)).toBeCloseTo(pipeRadius, 4);
+    expect(found).toBe(true);
+    const dist = Math.sqrt((expectedTip[0] - notch.pipeCenter[0]) ** 2 + (expectedTip[1] - notch.pipeCenter[1]) ** 2);
+    expect(dist).toBeCloseTo(pipeRadius, 6);
   });
 
   it("sits on top of layer 1, not the bare curve — offset by skinLayer1ThicknessMm in world Y", () => {
@@ -1003,10 +1013,33 @@ describe("buildHalfPipeSkinLayer2", () => {
     const left = xExtents.filter((x) => x < 0);
     expect(right).toHaveLength(left.length);
   });
+
+  it("starts its curve-sheet Z-columns from the opposite edge to layer 1's own columns", () => {
+    // a width that doesn't divide evenly by the (matching) sheet lengths, so the two edges
+    // genuinely produce different seams — the plain opposite-edge tiling, not the fallback stagger
+    const params = { ...HALF_PIPE_DEFAULTS, width: 3, skinSheetLength: 2.4, skinLayer2SheetLength: 2.4 };
+    const layer1ZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
+    const layer2ZColumns = staggeredZColumns(params.width / 2, params.skinSheetLength, params.skinLayer2SheetLength);
+    expect(layer2ZColumns).not.toEqual(layer1ZColumns);
+
+    const sheets = buildHalfPipeSkinLayer2(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const rightCurveSheets = sheets.filter((g) => g.type === "ExtrudeGeometry" && (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2 > 0);
+    const zSpans = new Set(rightCurveSheets.map((g) => `${g.boundingBox!.min.z.toFixed(6)},${g.boundingBox!.max.z.toFixed(6)}`));
+    const expectedZSpans = new Set(layer2ZColumns.map(([s, e]) => `${s.toFixed(6)},${e.toFixed(6)}`));
+    expect(zSpans).toEqual(expectedZSpans);
+  });
+
+  it("falls back to a staggered start when the ramp's width divides evenly by the (matching) sheet length", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, width: 4.8, skinSheetLength: 2.4, skinLayer2SheetLength: 2.4 };
+    const layer2ZColumns = staggeredZColumns(params.width / 2, params.skinSheetLength, params.skinLayer2SheetLength);
+    const lastSpan = layer2ZColumns[layer2ZColumns.length - 1][1] - layer2ZColumns[layer2ZColumns.length - 1][0];
+    expect(lastSpan).toBeCloseTo(params.skinLayer2SheetLength / 2, 10); // the staggered starter piece, not a full sheet
+  });
 });
 
 describe("copingTouchExtension usage sanity", () => {
-  it("gives layer 2's outer and inner edges their own (different) extension toward the coping pipe", () => {
+  it("gives a genuinely different result for the outer vs inner edge radius, even though buildHalfPipeSkinLayer2 only uses the inner one (squared cut, see skin.ts)", () => {
     const params = HALF_PIPE_DEFAULTS;
     const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
     const notch = copingNotch(
@@ -1027,7 +1060,7 @@ describe("copingTouchExtension usage sanity", () => {
     const innerExtension = copingTouchExtension(params.radius, rInner, notch.shelfAngle, notch.pipeCenter, pipeRadius);
     expect(innerExtension).toBeGreaterThan(0);
     expect(outerExtension).toBeGreaterThan(0);
-    expect(outerExtension).not.toBeCloseTo(innerExtension, 5); // confirms they're genuinely computed separately, not the same value reused
+    expect(outerExtension).not.toBeCloseTo(innerExtension, 5);
   });
 });
 
@@ -1127,10 +1160,10 @@ describe("halfPipeFootprint", () => {
 
   it("computes length/width/height at defaults", () => {
     const footprint = halfPipeFootprint(HALF_PIPE_DEFAULTS);
-    // bottomTransitionLength (2.25) + 2 * (radius * sin(57deg) + deckLength) = 2.25 + 2 * (1.8*sin(57deg) + 0.3)
-    expect(footprint.length).toBeCloseTo(5.8692, 4);
+    // bottomTransitionLength (2.4) + 2 * (radius * sin(57deg) + deckLength) = 2.4 + 2 * (1.8*sin(57deg) + 0.6)
+    expect(footprint.length).toBeCloseTo(6.6192, 4);
     // width param directly — edge ribs are inset (see ribZPositions), so no overhang past it
-    expect(footprint.width).toBeCloseTo(3, 5);
+    expect(footprint.width).toBeCloseTo(2.4, 5);
     // radius * (1 - cos(57deg)) + joistDepthMm / 1000 (90mm)
     expect(footprint.height).toBeCloseTo(0.90965, 5);
   });

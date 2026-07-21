@@ -37,7 +37,8 @@ interface RampSpec {
   bottomTransitionSliders: SliderSpec[];
   rampSliders: SliderSpec[];
   copingSliders: SliderSpec[];
-  skinSliders: SliderSpec[];
+  skinLayer1Sliders: SliderSpec[];
+  skinLayer2Sliders: SliderSpec[];
   // Edge ribs (frame the deck edges, stay visible once skinned) vs internal seam ribs (buried
   // inside the skin, hidden by "Show skin") — see buildHalfPipeRibsBySection.
   buildRibsBySection: (params: HalfPipeParams) => { edgeRibs: THREE.BufferGeometry[]; internalRibs: THREE.BufferGeometry[] };
@@ -75,7 +76,7 @@ const RAMP: RampSpec = {
     { key: "internalCurveJoistCount", label: "Internal curve joists", min: 0, max: 30, step: 1 },
   ],
   bottomTransitionSliders: [
-    { key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.25 },
+    { key: "bottomTransitionLength", label: "Bottom transition length (m)", min: 1, max: 8, step: 0.1 },
     { key: "internalStudCount", label: "Internal studs", min: 0, max: 20, step: 1 },
   ],
   copingSliders: [
@@ -84,13 +85,15 @@ const RAMP: RampSpec = {
     { key: "copingHorizontalProtrusionMm", label: "Horizontal protrusion (mm)", min: 0, max: 15, step: 0.1 },
     { key: "copingVerticalProtrusionMm", label: "Vertical protrusion (mm)", min: 0, max: 15, step: 0.1 },
   ],
-  skinSliders: [
-    { key: "skinLayer1ThicknessMm", label: "Layer 1 thickness (mm)", min: 3, max: 25, step: 1 },
-    { key: "skinLayer2ThicknessMm", label: "Layer 2 thickness (mm)", min: 3, max: 25, step: 1 },
-    { key: "skinSheetLength", label: "Layer 1 sheet length (m)", min: 1, max: 3.6, step: 0.01 },
-    { key: "skinSheetWidth", label: "Layer 1 sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
-    { key: "skinLayer2SheetLength", label: "Layer 2 sheet length (m)", min: 1, max: 3.6, step: 0.01 },
-    { key: "skinLayer2SheetWidth", label: "Layer 2 sheet width (m)", min: 0.6, max: 1.5, step: 0.01 },
+  skinLayer1Sliders: [
+    { key: "skinLayer1ThicknessMm", label: "Thickness (mm)", min: 3, max: 25, step: 1 },
+    { key: "skinSheetLength", label: "Sheet length (m)", min: 1, max: 3.6, step: 0.1 },
+    { key: "skinSheetWidth", label: "Sheet width (m)", min: 0.6, max: 1.5, step: 0.1 },
+  ],
+  skinLayer2Sliders: [
+    { key: "skinLayer2ThicknessMm", label: "Thickness (mm)", min: 3, max: 25, step: 1 },
+    { key: "skinLayer2SheetLength", label: "Sheet length (m)", min: 1, max: 3.6, step: 0.1 },
+    { key: "skinLayer2SheetWidth", label: "Sheet width (m)", min: 0.6, max: 1.5, step: 0.1 },
   ],
   rampSliders: [
     { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
@@ -111,15 +114,15 @@ const RAMP: RampSpec = {
 };
 
 const AVAILABLE_SPACE_SLIDERS: SliderSpec[] = [
-  { key: "length", label: "Available length (m)", min: 3, max: 15, step: 0.5 },
-  { key: "width", label: "Available width (m)", min: 1, max: 6, step: 0.25 },
+  { key: "length", label: "Available length (m)", min: 3, max: 15, step: 0.1 },
+  { key: "width", label: "Available width (m)", min: 1, max: 6, step: 0.1 },
   { key: "height", label: "Available height (m)", min: 1, max: 4, step: 0.1 },
 ];
 
-// Fits HALF_PIPE_DEFAULTS's footprint (~5.57m / 3m / 0.99m) with length/height to spare.
+// Fits HALF_PIPE_DEFAULTS's own footprint (~6.62m / 2.4m / 0.91m) with a little length to spare.
 // Untyped as Footprint (unlike a ramp's computed footprint) since it's edited as loose
 // slider state via renderSliderList, the same way currentParams is.
-const availableSpace: Record<string, number> = { length: 6, width: 3, height: 2 };
+const availableSpace: Record<string, number> = { length: 6.7, width: 3, height: 2 };
 
 const viewport = document.getElementById("viewport")!;
 const spaceSlidersEl = document.getElementById("space-sliders")!;
@@ -128,7 +131,8 @@ const ribSlidersEl = document.getElementById("rib-sliders")!;
 const joistSlidersEl = document.getElementById("joist-sliders")!;
 const bottomTransitionSlidersEl = document.getElementById("bottom-transition-sliders")!;
 const copingSlidersEl = document.getElementById("coping-sliders")!;
-const skinSlidersEl = document.getElementById("skin-sliders")!;
+const skinLayer1SlidersEl = document.getElementById("skin-layer1-sliders")!;
+const skinLayer2SlidersEl = document.getElementById("skin-layer2-sliders")!;
 const skinGrainDirectionEl = document.getElementById("skin-grain-direction") as HTMLSelectElement;
 const rampSlidersEl = document.getElementById("ramp-sliders")!;
 const resetBtn = document.getElementById("reset-btn")!;
@@ -137,7 +141,8 @@ const undoBtn = document.getElementById("undo-btn") as HTMLButtonElement;
 const redoBtn = document.getElementById("redo-btn") as HTMLButtonElement;
 const dimensionsToggle = document.getElementById("dimensions-toggle") as HTMLInputElement;
 const scaleToggle = document.getElementById("scale-toggle") as HTMLInputElement;
-const skinToggle = document.getElementById("skin-toggle") as HTMLInputElement;
+const skinLayer1Toggle = document.getElementById("skin-layer1-toggle") as HTMLInputElement;
+const skinLayer2Toggle = document.getElementById("skin-layer2-toggle") as HTMLInputElement;
 const themeToggle = document.getElementById("theme-toggle")!;
 const aboutBtn = document.getElementById("about-btn")!;
 const aboutCloseBtn = document.getElementById("about-close-btn")!;
@@ -518,8 +523,8 @@ function rebuildRamp(): void {
   }
   skinLayer2Group.clear();
   for (const geometry of RAMP.buildSkinLayer2(currentParams)) {
-    // Same high threshold angle as layer 1's own wireframe used, to drop the curve's own
-    // internal arc-facet seams and keep just each sheet's real silhouette.
+    // High threshold angle drops the curve's own internal arc-facet seams (shallow angles
+    // between adjacent segments) and keeps only each sheet's real silhouette.
     const sheet = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), skinLayer2LineMaterial);
     skinLayer2Group.add(sheet);
   }
@@ -586,7 +591,8 @@ function renderAllSliderGroups(): void {
   renderSliderList(joistSlidersEl, RAMP.joistSliders, state, rebuildRamp);
   renderSliderList(bottomTransitionSlidersEl, RAMP.bottomTransitionSliders, state, rebuildRamp);
   renderSliderList(copingSlidersEl, RAMP.copingSliders, state, rebuildRamp);
-  renderSliderList(skinSlidersEl, RAMP.skinSliders, state, rebuildRamp);
+  renderSliderList(skinLayer1SlidersEl, RAMP.skinLayer1Sliders, state, rebuildRamp);
+  renderSliderList(skinLayer2SlidersEl, RAMP.skinLayer2Sliders, state, rebuildRamp);
   renderSliderList(rampSlidersEl, RAMP.rampSliders, state, rebuildRamp);
   renderSliderList(spaceSlidersEl, AVAILABLE_SPACE_SLIDERS, availableSpace, renderSpaceStatus);
   skinGrainDirectionEl.value = currentParams.skinGrainDirection;
@@ -646,14 +652,21 @@ scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
 });
-skinToggle.addEventListener("input", () => {
-  const showSkin = skinToggle.checked;
-  bottomTransitionGroup.visible = !showSkin;
-  curveJoistGroup.visible = !showSkin;
-  internalRibGroup.visible = !showSkin;
-  skinGroup.visible = showSkin;
-  skinLayer2Group.visible = showSkin;
-});
+// Structural framing (bottom transition, curve joists, internal ribs) hides once either skin
+// layer is shown — both sit directly on/over it, so seeing them "through" the skin is just
+// visual clutter, not information the user needs the ribs/joists to still show for.
+function updateSkinVisibility(): void {
+  const showLayer1 = skinLayer1Toggle.checked;
+  const showLayer2 = skinLayer2Toggle.checked;
+  const hideStructure = showLayer1 || showLayer2;
+  bottomTransitionGroup.visible = !hideStructure;
+  curveJoistGroup.visible = !hideStructure;
+  internalRibGroup.visible = !hideStructure;
+  skinGroup.visible = showLayer1;
+  skinLayer2Group.visible = showLayer2;
+}
+skinLayer1Toggle.addEventListener("input", updateSkinVisibility);
+skinLayer2Toggle.addEventListener("input", updateSkinVisibility);
 skinGrainDirectionEl.addEventListener("change", () => {
   history.record(snapshot());
   currentParams.skinGrainDirection = skinGrainDirectionEl.value as SkinGrainDirection;
