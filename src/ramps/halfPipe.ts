@@ -4,7 +4,7 @@ import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
-import { buildSkinCurveSheet, buildSkinFlatSheet, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { buildSkinCurveSheet, tileFromEdgeClipped } from "./skin";
 
 /**
  * Which way a plywood sheet is laid relative to the ribs it skins: "length-ways" runs the
@@ -493,25 +493,19 @@ export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[
 }
 
 /**
- * Layer 1's full coverage: curved sheets up the transition, plus flat sheets on the bottom
- * transition where nothing needs to bend.
- *
- * Curve coverage tiles skinSheetWidth-wide sheets (arc length, not X-projection, since bent
- * plywood doesn't stretch) up from the ground tangent, grain (the long, skinSheetLength edge)
+ * Layer 1's curved coverage up the transition — tiles skinSheetWidth-wide sheets (arc length,
+ * not X-projection, since bent plywood doesn't stretch), grain (the long, skinSheetLength edge)
  * running parallel to the ramp's width (Z), perpendicular to the ribs — the only orientation
  * that lets a sheet bend up the curve at all; bending along the grain breaks it (see skin.ts).
- * Cut off at the coping notch's own shelfAngle (see coping.ts), not the bare curve's full sweep
- * — sheets don't run past where the notch actually cuts the rib back. Tiled across Z in
- * skinSheetLength columns, clipped at the ramp's edges (±width/2) instead of overhanging past
- * them.
- *
- * Flat coverage (sheets that never touch a rib) keeps its long edge along X instead — no
- * bending needed there, so it's a layout choice, not a grain constraint. First sheet centered
- * on the bottom transition (X=0), tiled outward, clipped at ±half (the rib boundary) instead of
- * overhanging onto the curve — a sheet that would have to cross onto a rib is, for now, simply
- * clipped at the seam rather than modeled as one board spanning both zones with the curve's own
- * grain orientation for its curved portion; see features.md. Tiled across Z in skinSheetWidth
- * rows (its own short edge here), also clipped at the ramp's edges.
+ * Tiled from the coping notch's own shelfAngle (see coping.ts) *downward* to the ground tangent
+ * — a full sheet sits at the notch, since that's where a cut edge would be most visible/load-
+ * bearing. The last (ground-most) row often runs out of curve before it runs out of sheet — that
+ * leftover doesn't go to waste as a cut sheet; it continues flat onto the bottom transition
+ * instead (curveSheetShape's flatExtension, see skin.ts), the same way a real sheet would just
+ * lie flat once the surface stops bending under it. The bottom transition's own separate flat
+ * coverage (for the rest of the trough this doesn't reach) isn't built yet — see features.md.
+ * Tiled across Z in skinSheetLength columns, clipped at the ramp's edges (±width/2) instead of
+ * overhanging past them.
  */
 export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeometry[] {
   const {
@@ -552,28 +546,21 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
   const rowCount = Math.max(1, Math.ceil((radius * sweep) / skinSheetWidth));
   const curveZColumns = tileFromEdgeClipped(width / 2, skinSheetLength);
   for (let row = 0; row < rowCount; row++) {
-    const t0 = (row * skinSheetWidth) / radius;
-    const t1 = Math.min(((row + 1) * skinSheetWidth) / radius, sweep);
+    const t1 = Math.max(sweep - (row * skinSheetWidth) / radius, 0);
+    const t0 = Math.max(sweep - ((row + 1) * skinSheetWidth) / radius, 0);
+    const flatExtension = Math.max(skinSheetWidth - radius * (t1 - t0), 0); // this row's own leftover, once the curve runs out
     for (const [zStart, zEnd] of curveZColumns) {
       const zSpan = zEnd - zStart;
       const zCenter = (zStart + zEnd) / 2;
 
-      const left = buildSkinCurveSheet(radius, thickness, t0, t1, zSpan);
+      const left = buildSkinCurveSheet(radius, thickness, t0, t1, zSpan, flatExtension);
       left.scale(-1, 1, 1);
       left.translate(-half, jointDepth, zCenter);
       sheets.push(left);
 
-      const right = buildSkinCurveSheet(radius, thickness, t0, t1, zSpan);
+      const right = buildSkinCurveSheet(radius, thickness, t0, t1, zSpan, flatExtension);
       right.translate(half, jointDepth, zCenter);
       sheets.push(right);
-    }
-  }
-
-  const flatXSegments = tileCenteredClipped(half, skinSheetLength);
-  const flatZRows = tileFromEdgeClipped(width / 2, skinSheetWidth);
-  for (const [xStart, xEnd] of flatXSegments) {
-    for (const [zStart, zEnd] of flatZRows) {
-      sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, jointDepth));
     }
   }
 

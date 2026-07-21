@@ -291,32 +291,33 @@ them for free. The select is wired by hand in `main.ts` rather than through `ren
 `resetParams` does, and `renderAllSliderGroups` syncs its displayed value from `currentParams`
 on load/undo/redo/reset.
 
-`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's own sheet
-layout — no layer 2 yet (see features.md). Rendered solid (`skinGroup` in `main.ts`), one
-`MeshStandardMaterial` per sheet, all the same green hue (`SKIN_HUE`) but a different lightness
-each (`0.25` to `0.75`, spread evenly across however many sheets there are) so individual sheets
-are distinguishable for a placement check, not because it's the intended final material.
-Toggled by "Show skin" like the rest of that group.
+`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's curved
+coverage — no separate flat bottom-transition coverage and no layer 2 yet (see features.md).
+Rendered wireframe-only (`THREE.LineSegments` + `EdgesGeometry`, not solid `Mesh`, in
+`skinGroup`) since this is for visually checking sheet placement, not final rendering; toggled
+by "Show skin" like the rest of that group. `EdgesGeometry` is given a high threshold angle
+(20°, `main.ts`) so it draws each sheet's real silhouette only — its corners are far sharper
+than that — and drops the shallow-angle seams between the curve's own internal arc facets
+(`SHEET_ARC_SEGMENTS`, skin.ts), which would otherwise clutter the wireframe with lines that
+aren't real sheet edges.
 
-Two kinds of sheet, tiled separately:
-- **Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
-  arcs sharing the transition's own center — the outer edge exactly on the transition curve, the
-  inner (exposed, rideable-side) edge offset inward by `skinLayer1ThicknessMm`. Offsetting a
-  circle by a constant distance along its own normal is just a smaller concentric circle, so this
-  is exact, not approximated. Tiled up from the ground tangent in `skinSheetWidth`-wide arc-length
-  rows (not X-projection — bent plywood doesn't stretch), grain (the long `skinSheetLength` edge)
-  running parallel to the ramp's width (Z), perpendicular to the ribs — the only orientation that
-  lets a sheet bend up the curve at all; that's a hard physical constraint, not something
-  `skinGrainDirection` picks. Cut off at the coping notch's own `shelfAngle` (see coping.ts), not
-  the bare curve's full sweep. Tiled across Z in `skinSheetLength` columns
-  (`tileFromEdgeClipped`, skin.ts), clipped at the ramp's edges (±width/2) instead of overhanging.
-- **Flat sheets**: `buildSkinFlatSheet`, plain boxes on the bottom transition, where nothing
-  needs to bend so grain direction is a layout choice, not a constraint — long edge along X
-  instead. First sheet centered at X=0 (`tileCenteredClipped`, skin.ts), tiled outward, clipped
-  at ±half (the rib boundary) rather than overhanging onto a rib. A sheet that would have to
-  cross onto a rib is, for now, simply clipped at that seam rather than modeled as one board
-  spanning both zones with the curve's own grain orientation for its curved portion — see
-  features.md.
+`buildSkinCurveSheet` cuts a "washer" cross-section between two concentric arcs sharing the
+transition's own center — the outer edge exactly on the transition curve, the inner (exposed,
+rideable-side) edge offset inward by `skinLayer1ThicknessMm`. Offsetting a circle by a constant
+distance along its own normal is just a smaller concentric circle, so this is exact, not
+approximated. Tiled in `skinSheetWidth`-wide arc-length rows (not X-projection — bent plywood
+doesn't stretch), grain (the long `skinSheetLength` edge) running parallel to the ramp's width
+(Z), perpendicular to the ribs — the only orientation that lets a sheet bend up the curve at
+all; that's a hard physical constraint, not something `skinGrainDirection` picks. Tiled *from
+the coping notch's own `shelfAngle` (see coping.ts) downward* to the ground tangent — a full
+sheet sits at the notch. The ground-most row usually runs out of curve before it runs out of
+sheet; rather than cut it short there, `curveSheetShape`'s `flatExtension` continues that
+leftover length flat, past the ground tangent and onto the bottom transition (only when its own
+`t0` is exactly 0 — nothing to attach a lead-in to otherwise) — the same way a real sheet just
+lies flat once the surface under it stops bending. The rest of the bottom transition (whatever
+this doesn't reach) still isn't covered — see features.md. Tiled across Z in `skinSheetLength`
+columns (`tileFromEdgeClipped`, skin.ts), clipped at the ramp's edges (±width/2) instead of
+overhanging.
 
 ## Dimension lines
 

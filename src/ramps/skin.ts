@@ -16,13 +16,21 @@ function arcPointAtRadius(centerRadius: number, r: number, t: number): [number, 
  * near the notch, exact here rather than approximate since the whole cross-section is built
  * from it, not just one corner point. t0/t1 are the segment's start/end arc parameters
  * (radians, 0 at the ground tangent, matching transitionArcPoints).
+ *
+ * flatExtension, when t0 is 0 (this sheet reaches the ground tangent), adds a flat lead-in
+ * running further in -x from there — the sheet's own leftover length once the curve runs out,
+ * continuing flat onto the bottom transition instead of stopping short at the seam (see
+ * buildHalfPipeSkinLayer1). Ignored (no lead-in added) unless t0 is actually 0 — there'd be
+ * nothing at x=0 for it to attach to otherwise.
  */
-function curveSheetShape(radius: number, thickness: number, t0: number, t1: number): THREE.Shape {
+function curveSheetShape(radius: number, thickness: number, t0: number, t1: number, flatExtension = 0): THREE.Shape {
+  const extend = flatExtension > 0 && t0 === 0;
   const shape = new THREE.Shape();
+  if (extend) shape.moveTo(-flatExtension, 0);
   for (let i = 0; i <= SHEET_ARC_SEGMENTS; i++) {
     const t = t0 + ((t1 - t0) * i) / SHEET_ARC_SEGMENTS;
     const [x, y] = arcPointAtRadius(radius, radius, t);
-    if (i === 0) shape.moveTo(x, y);
+    if (i === 0 && !extend) shape.moveTo(x, y);
     else shape.lineTo(x, y);
   }
   for (let i = 0; i <= SHEET_ARC_SEGMENTS; i++) {
@@ -30,6 +38,7 @@ function curveSheetShape(radius: number, thickness: number, t0: number, t1: numb
     const [x, y] = arcPointAtRadius(radius, radius - thickness, t);
     shape.lineTo(x, y);
   }
+  if (extend) shape.lineTo(-flatExtension, thickness);
   shape.closePath();
   return shape;
 }
@@ -38,9 +47,10 @@ function curveSheetShape(radius: number, thickness: number, t0: number, t1: numb
  * One curved skin sheet, local/unmirrored (x >= 0, rising from the ground tangent at t=0 like
  * transitionArcPoints) — extruded across zSpan and centered on Z so callers just translate to
  * the column's center Z (and mirror/shift X for the left/right side, see buildHalfPipeSkinLayer1).
+ * flatExtension: see curveSheetShape.
  */
-export function buildSkinCurveSheet(radius: number, thickness: number, t0: number, t1: number, zSpan: number): THREE.BufferGeometry {
-  const shape = curveSheetShape(radius, thickness, t0, t1);
+export function buildSkinCurveSheet(radius: number, thickness: number, t0: number, t1: number, zSpan: number, flatExtension = 0): THREE.BufferGeometry {
+  const shape = curveSheetShape(radius, thickness, t0, t1, flatExtension);
   const geometry = new THREE.ExtrudeGeometry(shape, { depth: zSpan, bevelEnabled: false });
   geometry.translate(0, 0, -zSpan / 2);
   return geometry;

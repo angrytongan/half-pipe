@@ -200,9 +200,9 @@ const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalne
 const copingGroup = new THREE.Group();
 scene.add(copingGroup);
 
-// Each sheet gets its own shade of green (varied lightness, same hue) so individual sheets are
-// distinguishable — see buildHalfPipeSkinLayer1/rebuildRamp.
-const SKIN_HUE = 1 / 3; // green
+// Wireframe only (edges, not solid meshes) — laid out for visual placement checking, not final
+// rendering; see buildHalfPipeSkinLayer1.
+const skinLineMaterial = new THREE.LineBasicMaterial({ color: 0xffcc00 });
 const skinGroup = new THREE.Group();
 skinGroup.visible = false;
 scene.add(skinGroup);
@@ -476,27 +476,16 @@ function rebuildRamp(): void {
   }
 
   for (const child of skinGroup.children) {
-    if (child instanceof THREE.Mesh) {
-      child.geometry.dispose();
-      (child.material as THREE.Material).dispose();
-    }
+    if (child instanceof THREE.LineSegments) child.geometry.dispose();
   }
   skinGroup.clear();
-  const skinSheets = RAMP.buildSkinLayer1(currentParams);
-  skinSheets.forEach((geometry, i) => {
-    const lightness = 0.25 + (0.5 * i) / Math.max(1, skinSheets.length - 1); // spreads shades across the whole set, not clustered
-    // side: DoubleSide — the left side's sheets are built by mirroring (geometry.scale(-1,1,1) in
-    // buildHalfPipeSkinLayer1), which flips winding without correcting it, same as the ribs (see
-    // `material` above); sidesteps verifying triangle winding on the mirrored geometry.
-    const skinMaterial = new THREE.MeshStandardMaterial({
-      color: new THREE.Color().setHSL(SKIN_HUE, 0.6, lightness),
-      flatShading: true,
-      side: THREE.DoubleSide,
-    });
-    const sheet = new THREE.Mesh(geometry, skinMaterial);
-    sheet.castShadow = true;
+  for (const geometry of RAMP.buildSkinLayer1(currentParams)) {
+    // A high threshold angle drops the curve's own internal arc-facet seams (shallow angles
+    // between adjacent segments) and keeps only each sheet's real silhouette (its corners are
+    // much sharper than that) — just the outline, not every facet of the curve's approximation.
+    const sheet = new THREE.LineSegments(new THREE.EdgesGeometry(geometry, 20), skinLineMaterial);
     skinGroup.add(sheet);
-  });
+  }
 
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);

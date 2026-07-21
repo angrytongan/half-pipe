@@ -23,22 +23,32 @@ created by the joists and ribs, which provides the surface to skate on. We use
 multiple layers instead of a single thick one so we're able to bend the
 plywood without breaking it.
 
-Layer 1's own tiling is built (`src/ramps/skin.ts` + `halfPipe.ts`'s
-`buildHalfPipeSkinLayer1`, see status.md): curved sheets up the transition
-(cut off at the coping notch, clipped at the ramp's edges, grain forced
-perpendicular to the ribs so they can bend) plus flat sheets on the bottom
-transition (long edge along the ribs' own direction, no bending needed).
-Rendered solid, one shade of green per sheet, to check placement, not as final geometry/material.
+Layer 1's curved coverage is built (`src/ramps/skin.ts` + `halfPipe.ts`'s
+`buildHalfPipeSkinLayer1`, see status.md): sheets up the transition, cut off
+at the coping notch, clipped at the ramp's edges, grain forced perpendicular
+to the ribs so they can bend. Tiled from the notch downward so a full sheet
+sits there (not a cut one). The ground-most row's own leftover (once the
+curve runs out but the sheet hasn't) continues flat onto the bottom
+transition instead of stopping cut at the seam — `curveSheetShape`'s
+`flatExtension`. Rendered wireframe (each sheet's real outline only, not
+its internal curve-approximation facets — see status.md), to check
+placement, not as final geometry/material.
+
+The rest of the bottom transition — whatever a curve row's own flat
+extension doesn't reach — still has no coverage of its own.
 
 Remaining:
 
+- [ ] The bottom transition's own flat sheets (centered at X=0, tiled
+      outward, `tileCenteredClipped`/`buildSkinFlatSheet` in skin.ts —
+      both still there, just unused) for whatever a curve row's flat
+      extension doesn't reach. Needs a rule for how the two meet — does a
+      flat sheet butt against the curve row's extension, overlap it, or
+      does the extension's own reach change how the flat sheets are laid
+      out at all?
 - [ ] Layer 2 — sits on top of layer 1, not yet built or described in detail
       (its own placement rules, e.g. whether it staggers seams against layer
       1, haven't been specified).
-- [ ] A sheet that would cross from the bottom transition onto a rib is
-      currently just clipped at that seam (two separate sheets meeting at
-      ±half) instead of modeled as one real board spanning both zones with
-      the curve's own grain orientation for its curved portion.
 - [ ] `skinGrainDirection` isn't consumed by any geometry yet — on the curve,
       grain orientation is a hard physical constraint (perpendicular to the
       ribs, so the sheet can bend), not a free choice, so it's unclear where
@@ -47,6 +57,5 @@ Remaining:
       reusing an off-cut from one row as the start of the next) — sheets are
       currently laid out edge-to-edge and clipped, not optimized to minimize
       scrap.
-- [ ] Real final material/rendering (right now every sheet is an arbitrary
-      shade of green, purely to tell sheets apart), once the layout itself
-      is confirmed correct.
+- [ ] Real final material/rendering (right now it's wireframe, purely to
+      check placement), once the layout itself is confirmed correct.

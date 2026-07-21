@@ -54,4 +54,22 @@ describe("buildSkinCurveSheet", () => {
     high.computeBoundingBox();
     expect(high.boundingBox!.max.y).toBeGreaterThan(low.boundingBox!.max.y);
   });
+
+  it("extends flat past the ground tangent by flatExtension, at the same y-range as the curve's own t=0 edge", () => {
+    const flatExtension = 0.4;
+    const geometry = buildSkinCurveSheet(radius, thickness, 0, 0.3, 1, flatExtension);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox!;
+    expect(box.min.x).toBeCloseTo(-flatExtension, 5);
+    expect(box.min.y).toBeCloseTo(0, 5);
+    expect(box.max.y).toBeGreaterThan(0); // still reaches up the curve past t=0 too
+  });
+
+  it("ignores flatExtension when t0 isn't 0 — nothing for it to attach to", () => {
+    const withExtension = buildSkinCurveSheet(radius, thickness, 0.1, 0.4, 1, 0.4);
+    const without = buildSkinCurveSheet(radius, thickness, 0.1, 0.4, 1, 0);
+    withExtension.computeBoundingBox();
+    without.computeBoundingBox();
+    expect(withExtension.boundingBox!.min.x).toBeCloseTo(without.boundingBox!.min.x, 5);
+  });
 });
