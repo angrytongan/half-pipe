@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import {
   buildBottomTransitionFrame,
+  buildHalfPipeDeck,
   buildHalfPipeGeometry,
   buildHalfPipeJoists,
   buildHalfPipeJoistsBySection,
@@ -676,6 +677,68 @@ describe("buildHalfPipeJoistsBySection", () => {
     expect(leftJoist).toBeDefined();
     expect(rightJoist!.boundingBox!.max.x - rightJoist!.boundingBox!.min.x).toBeCloseTo(thickness, 6);
     expect(leftJoist!.boundingBox!.max.x - leftJoist!.boundingBox!.min.x).toBeCloseTo(thickness, 6);
+  });
+});
+
+describe("buildHalfPipeDeck", () => {
+  it("returns one board per side", () => {
+    expect(buildHalfPipeDeck(HALF_PIPE_DEFAULTS)).toHaveLength(2);
+  });
+
+  it("spans the full width in Z, flush with the edge ribs' outer faces — not inset between them like a joist", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, width: 3.7 };
+    for (const board of buildHalfPipeDeck(params)) {
+      board.computeBoundingBox();
+      const box = board.boundingBox!;
+      expect(box.max.z - box.min.z).toBeCloseTo(params.width, 5);
+      expect(box.min.z).toBeCloseTo(-params.width / 2, 5);
+      expect(box.max.z).toBeCloseTo(params.width / 2, 5);
+    }
+  });
+
+  it("runs in X from the notch's vertical wall to the rib's own outer edge, on both sides", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const deckOuter = points[points.length - 1];
+    const notch = copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+    );
+    const [wallX] = notch.wallTop;
+
+    const boards = buildHalfPipeDeck(params);
+    const rightBoard = boards.find((board) => {
+      board.computeBoundingBox();
+      return (board.boundingBox!.min.x + board.boundingBox!.max.x) / 2 > 0;
+    })!;
+    const leftBoard = boards.find((board) => {
+      board.computeBoundingBox();
+      return (board.boundingBox!.min.x + board.boundingBox!.max.x) / 2 < 0;
+    })!;
+
+    expect(rightBoard.boundingBox!.min.x).toBeCloseTo(half + wallX, 5);
+    expect(rightBoard.boundingBox!.max.x).toBeCloseTo(half + deckOuter[0], 5);
+    expect(leftBoard.boundingBox!.max.x).toBeCloseTo(-(half + wallX), 5);
+    expect(leftBoard.boundingBox!.min.x).toBeCloseTo(-(half + deckOuter[0]), 5);
+  });
+
+  it("sits on top of the deck joists: bottom flush with their top face, extending upward by ribThicknessMm", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, ribThicknessMm: 25 };
+    const jointDepth = params.joistDepthMm / 1000;
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const deckOuter = points[points.length - 1];
+    const deckJoistTopY = deckOuter[1] + jointDepth;
+
+    for (const board of buildHalfPipeDeck(params)) {
+      board.computeBoundingBox();
+      const box = board.boundingBox!;
+      expect(box.min.y).toBeCloseTo(deckJoistTopY, 6);
+      expect(box.max.y - box.min.y).toBeCloseTo(0.025, 6);
+    }
   });
 });
 

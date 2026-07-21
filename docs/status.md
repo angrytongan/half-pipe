@@ -212,6 +212,23 @@ dozens of small joist boxes read as different material from the blue ribs
 rather than visual noise) so "Show skin" can hide the former without touching
 the latter — see Scene below.
 
+### Deck
+
+`buildHalfPipeDeck` (`halfPipe.ts`) is the first physical piece of the deck itself, not just its
+joists — one flat board per side, the same material/thickness as the ribs (`ribThicknessMm`).
+Runs in X from the coping notch's vertical wall (`notch.wallTop` — the same point the deck-inner
+joist anchors to, see Joists above) out to the rib's own outer edge (`deckOuter`, the ramp's
+rear) — a plain box, not yet split into build sections or real sheet sizes the way the ribs/skin
+sliders are, since a flat board doesn't need to bend the way the curved skin will. Spans the
+full `width` in Z, flush with the edge ribs' *outer* faces — it sits over them, unlike a joist,
+which insets to their *inside* faces and stops between them. Sits on top of the deck joists: its
+bottom face is flush with their top face (the rib's own drawn deck line), extending upward by
+its own thickness — so its top surface ends up `ribThicknessMm` above that line, since the line
+itself is only a stand-in for the finished surface height and hasn't been repositioned yet (see
+features.md's Coping entry). `main.ts` renders it into its own `THREE.Group` (`deckGroup`,
+reusing the ribs' own material) that's always visible — unlike the internal ribs/curve joists,
+it isn't hidden by "Show skin".
+
 ### Coping
 
 `src/ramps/coping.ts`'s `copingNotch` computes the notch cut into the rib at the deck/curve

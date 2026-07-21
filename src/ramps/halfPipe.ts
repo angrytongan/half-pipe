@@ -412,6 +412,46 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
 }
 
 /**
+ * The deck itself — one flat board per side, the same material as the ribs (`ribThicknessMm`).
+ * Runs in X from the notch's vertical wall (`notch.wallTop`, the same point the deck-inner
+ * joist anchors to — see `buildHalfPipeJoistsBySection`) out to the rib's own outer edge
+ * (`deckOuter`, the ramp's rear). Spans the full `width` in Z — flush with the edge ribs'
+ * *outer* faces, so it sits over them (unlike a joist, which insets to their *inside* faces and
+ * stops between them). Sits on top of the deck joists: its bottom face is flush with their top
+ * face (the rib's own drawn deck line), extending upward by its own thickness — so its top
+ * surface ends up `ribThicknessMm` above that line, since the line itself is only a stand-in for
+ * the finished surface height and hasn't been repositioned yet (see features.md).
+ */
+export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, ribThicknessMm, joistDepthMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000;
+  const ribThickness = ribThicknessMm / 1000;
+
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const deckOuter = points[points.length - 1];
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+  );
+  const [wallX] = notch.wallTop;
+  const deckTopOfJoistsY = deckOuter[1] + jointDepth; // the deck joists' own top face / the rib's own drawn deck line
+
+  const board = (mirrorX: (x: number) => number): THREE.BufferGeometry => {
+    const xStart = mirrorX(wallX);
+    const xEnd = mirrorX(deckOuter[0]);
+    const geometry = new THREE.BoxGeometry(Math.abs(xEnd - xStart), ribThickness, width);
+    geometry.translate((xStart + xEnd) / 2, deckTopOfJoistsY + ribThickness / 2, 0);
+    return geometry;
+  };
+
+  return [board((x) => -half - x), board((x) => half + x)];
+}
+
+/**
  * Coping pipe centers (in the returned geometry's centered coordinate space), both sides —
  * the lip where each transition meets its deck, i.e. the curve side, not the decks'
  * outer/back edges. Positioned by the same notch math that cuts the rib (see coping.ts), not

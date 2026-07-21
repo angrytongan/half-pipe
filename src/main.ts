@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
   buildBottomTransitionFrame,
+  buildHalfPipeDeck,
   buildHalfPipeJoistsBySection,
   buildHalfPipeRibsBySection,
   HALF_PIPE_DEFAULTS,
@@ -41,6 +42,8 @@ interface RampSpec {
   // Curve joists (under the curved/vert surface, hidden by "Show skin") vs deck joists (under
   // the flat deck/ground, always visible) — see buildHalfPipeJoistsBySection.
   buildJoistsBySection: (params: HalfPipeParams) => { curveJoists: THREE.BufferGeometry[]; deckJoists: THREE.BufferGeometry[] };
+  // The deck itself — one board per side, always visible (not hidden by "Show skin").
+  buildDeck: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // The bottom transition's own framing — a stud wall lying on the ground.
   buildBottomTransitionFrame: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // Centers (in the built geometry's own centered coordinate space) of the coping tubes —
@@ -88,6 +91,7 @@ const RAMP: RampSpec = {
   ],
   buildRibsBySection: buildHalfPipeRibsBySection,
   buildJoistsBySection: buildHalfPipeJoistsBySection,
+  buildDeck: buildHalfPipeDeck,
   buildBottomTransitionFrame: buildBottomTransitionFrame,
   copingCenters: halfPipeCopingCenters,
   footprint: halfPipeFootprint,
@@ -172,6 +176,10 @@ const edgeRibGroup = new THREE.Group();
 scene.add(edgeRibGroup);
 const internalRibGroup = new THREE.Group();
 scene.add(internalRibGroup);
+
+// Same material as the ribs (same stock) — always visible, not tied to "Show skin".
+const deckGroup = new THREE.Group();
+scene.add(deckGroup);
 
 const joistMaterial = new THREE.MeshStandardMaterial({ color: 0xc9a876, flatShading: true }); // wood-toned, distinct from the ribs
 // Split so "Show skin" can hide the curve joists (under the surface a skin would cover) while
@@ -419,6 +427,16 @@ function rebuildRamp(): void {
     const rib = new THREE.Mesh(geometry, material);
     rib.castShadow = true;
     internalRibGroup.add(rib);
+  }
+
+  for (const child of deckGroup.children) {
+    if (child instanceof THREE.Mesh) child.geometry.dispose();
+  }
+  deckGroup.clear();
+  for (const geometry of RAMP.buildDeck(currentParams)) {
+    const board = new THREE.Mesh(geometry, material);
+    board.castShadow = true;
+    deckGroup.add(board);
   }
 
   for (const child of curveJoistGroup.children) {
