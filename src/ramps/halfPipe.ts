@@ -173,14 +173,44 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
 }
 
 /**
+ * Local-space anchor points (and each one's own tangent angle) for the `internalCurveJoistCount`
+ * interior joists, spaced evenly by arc length between the bottom-most joist's own inside edge
+ * and the topmost joist's own bottom edge — not their anchor points, which would over-count half
+ * of each boundary joist's thickness at either end (see `buildHalfPipeJoists`). Converting that
+ * thickness/2 tangential offset to an angle via arc length (Δt = distance / radius) is exact for
+ * a circular arc. Shared with `halfPipeDimensions.ts`'s curve-joist-spacing dimension so it draws
+ * from the same geometry instead of re-deriving this angle math.
+ */
+export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: [number, number]; angle: number }[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, joistThicknessMm, internalCurveJoistCount, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm } = params;
+  const thickness = joistThicknessMm / 1000;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const notch = copingNotch(
+    points,
+    radius,
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+  );
+  const edgeAngle = thickness / 2 / radius;
+  const curveStartAngle = edgeAngle;
+  const curveEndAngle = notch.shelfAngle - edgeAngle;
+  const curveSegments = internalCurveJoistCount + 1;
+  return Array.from({ length: internalCurveJoistCount }, (_, i) => {
+    const angle = curveStartAngle + ((curveEndAngle - curveStartAngle) * (i + 1)) / curveSegments;
+    return { point: [radius * Math.sin(angle), radius * (1 - Math.cos(angle))] as [number, number], angle };
+  });
+}
+
+/**
  * Joist/ledger skeleton: one joist per (profile landmark point) x (build-section bay).
  * Landmarks per side — bottom corner (curve tangent, where it meets the bottom transition),
  * `internalCurveJoistCount` interior points up the curve (the two ends, bottom corner and notch
  * shelf, are always present regardless of the slider — this count is strictly what's added
  * between them), spaced evenly by arc length between the bottom-most joist's own *inside edge*
  * and the topmost joist's own *bottom edge* — not their anchor points, which would over-count
- * half of each boundary joist's thickness at either end (see `curveStartAngle`/`curveEndAngle`
- * below) — the coping notch's own shelf point, and the end of the floor
+ * half of each boundary joist's thickness at either end (see `curveInteriorJoistLocalPoints`
+ * above) — the coping notch's own shelf point, and the end of the floor
  * section (deck's outer edge, the ramp's own outer edge — the
  * rib's outline terminates exactly there, with no inset, unlike the bottom-corner end), and a
  * ground-level joist directly beneath the deck-outer one — the rib's own 7th, closing side
@@ -224,7 +254,6 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
     ribThicknessMm,
     joistThicknessMm,
     joistDepthMm,
-    internalCurveJoistCount,
     copingOdMm,
     copingHorizontalProtrusionMm,
     copingVerticalProtrusionMm,
@@ -245,21 +274,9 @@ export function buildHalfPipeJoists(params: HalfPipeParams): THREE.BufferGeometr
     copingVerticalProtrusionMm / 1000,
   );
 
-  // Interior joists fill the gap between the two boundary joists' own edges, not their
-  // anchor points: the bottom-most joist's inside (uphill) edge is thickness/2 along its own
-  // (flat) tangent from its (0,0) anchor, and the topmost joist's bottom (downhill) edge is
-  // thickness/2 further back than shelfEnd (shelfLocalPoint, below, already sits thickness/2
-  // back from shelfEnd, at the joist's *center*). Converting that thickness/2 tangential
-  // offset to an angle via arc length (Δt = distance / radius) is exact for a circular arc.
-  const edgeAngle = thickness / 2 / radius;
-  const curveStartAngle = edgeAngle;
-  const curveEndAngle = notch.shelfAngle - edgeAngle;
-  const curveSegments = internalCurveJoistCount + 1;
-  const curveInteriorAngles = Array.from(
-    { length: internalCurveJoistCount },
-    (_, i) => curveStartAngle + ((curveEndAngle - curveStartAngle) * (i + 1)) / curveSegments,
-  );
-  const curveInteriorPoints: [number, number][] = curveInteriorAngles.map((t) => [radius * Math.sin(t), radius * (1 - Math.cos(t))]);
+  const curveInterior = curveInteriorJoistLocalPoints(params);
+  const curveInteriorPoints = curveInterior.map((p) => p.point);
+  const curveInteriorAngles = curveInterior.map((p) => p.angle);
 
   // The shelf-point landmark is inset backward (downhill) along its own tangent by half the
   // joist's thickness, the same "flush face, not centered" convention the deck-outer inset

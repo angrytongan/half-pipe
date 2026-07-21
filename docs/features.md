@@ -16,16 +16,6 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       `obstacle`'s dimension code has this either, and `buildLinearDimension`
       only handles straight measurements.
 
-- [ ] We need a dimension line showing the distance between the midpoint of two
-      joists in a straight line. Candidate plan (deferred, not yet built):
-      chord distance between the bottom-corner curve joist and the topmost
-      (shelf) curve joist — the two boundary joists that are always present
-      regardless of `internalCurveJoistCount` — reusing `buildLinearDimension`
-      the same way `halfPipeDimensions.ts`'s other dimensions do. Would need
-      extracting the inline `shelfLocalPoint` calc out of
-      `buildHalfPipeJoists` (`src/ramps/halfPipe.ts`) into a shared helper
-      first, to avoid duplicating that geometry math.
-
 ## Coping
 
 - [ ] Reposition the notch's vertical cut once the ramp's actual riding

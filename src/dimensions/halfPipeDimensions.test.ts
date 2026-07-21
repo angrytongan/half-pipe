@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { buildHalfPipeDimensions } from "./halfPipeDimensions";
-import { HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
+import { curveInteriorJoistLocalPoints, HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 
 describe("buildHalfPipeDimensions", () => {
-  it("returns one dimension each for height, length, bottom transition length, rib spacing, width, and rib width, labeled to two decimals", () => {
+  it("returns one dimension each for height, length, bottom transition length, rib spacing, width, rib width, and curve-joist spacing, labeled to two decimals", () => {
     const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
-    expect(dims).toHaveLength(6);
+    expect(dims).toHaveLength(7);
     // height: radius * (1 - cos(57deg)) + joistDepthMm/1000 = 0.8196... + 0.09
     // length: bottomTransitionLength + 2 * (radius * sin(57deg) + deckLength)
     // bottom transition: bottomTransitionLength itself
@@ -19,7 +19,9 @@ describe("buildHalfPipeDimensions", () => {
     // rib width: one rib's own X-extent, from its base (bottommost curve joist's inside face,
     // half/2 - joistThicknessMm/1000/2 = 1.1025) out to its own deck outer edge (halfLength =
     // 2.9346...) = 1.8321...
-    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.46m", "3.00m", "1.83m"]);
+    // curve-joist spacing: straight-line (chord) distance between the first two of the 8
+    // default interior curve joists' own anchor points
+    expect(dims.map((d) => d.text)).toEqual(["0.91m", "5.87m", "2.25m", "1.46m", "3.00m", "1.83m", "0.19m"]);
   });
 
   it("computes width as exactly the width param (edge ribs are inset, no overhang), and rib spacing as the centerline gap minus one rib thickness", () => {
@@ -117,5 +119,28 @@ describe("buildHalfPipeDimensions", () => {
 
     expect(ribWidthDim.labelPosition.y).toBeCloseTo(bottomTransitionDim.labelPosition.y, 6);
     expect(ribWidthDim.labelPosition.z).toBeCloseTo(halfWidth + 0.4 + 0.08, 2);
+  });
+
+  it("measures the curve-joist spacing as the chord distance between the first two interior curve joists' own anchor points", () => {
+    const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+    const curveJoists = curveInteriorJoistLocalPoints(HALF_PIPE_DEFAULTS);
+    const [x0, y0] = curveJoists[0].point;
+    const [x1, y1] = curveJoists[1].point;
+    const expected = Math.hypot(x1 - x0, y1 - y0);
+
+    expect(dims[6].text).toBe(`${expected.toFixed(2)}m`);
+  });
+
+  it("omits the curve-joist spacing dimension when there are fewer than two interior curve joists to measure", () => {
+    expect(buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 1 })).toHaveLength(6);
+    expect(buildHalfPipeDimensions({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 })).toHaveLength(6);
+  });
+
+  it("places the curve-joist spacing dimension at a distinct position from every other dimension", () => {
+    const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+    const curveJoistSpacingDim = dims[6];
+    for (const other of dims.slice(0, 6)) {
+      expect(curveJoistSpacingDim.labelPosition.distanceTo(other.labelPosition)).toBeGreaterThan(0.5);
+    }
   });
 });

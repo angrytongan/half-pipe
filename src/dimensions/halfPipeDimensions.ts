@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { halfPipeFootprint, type HalfPipeParams } from "../ramps/halfPipe";
+import { curveInteriorJoistLocalPoints, halfPipeFootprint, type HalfPipeParams } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 import { buildLinearDimension, type LinearDimension } from "./dimensionLine";
 
@@ -14,12 +14,15 @@ function formatMeters(value: number): string {
 }
 
 /**
- * Height/length/bottom-transition-length/rib-spacing/width/rib-width dimension lines for a
- * half-pipe, computed analytically from HalfPipeParams (same approach as
+ * Height/length/bottom-transition-length/rib-spacing/width/rib-width/curve-joist-spacing
+ * dimension lines for a half-pipe, computed analytically from HalfPipeParams (same approach as
  * halfPipeFootprint/halfPipeCopingCenters) rather than from built rib geometry. Only one rib
  * and one rib-to-rib gap are dimensioned —
  * every rib is an identical copy of the others and ribs are evenly spaced (see ribZPositions),
- * so dimensioning each one would be redundant. Each dimension gets its own distinct position
+ * so dimensioning each one would be redundant; the curve-joist-spacing dimension is the same
+ * idea applied to one representative pair of adjacent interior curve joists (see
+ * curveInteriorJoistLocalPoints), omitted entirely when there are fewer than two to measure.
+ * Each dimension gets its own distinct position
  * (not just a different offset distance) — label sprites use depthTest:false so they don't
  * respect the Z-buffer, and two dimensions sharing a Z line and X center (as an earlier,
  * merely-offset-differently version of this code did for length/bottom-transition-length) can
@@ -91,7 +94,7 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     OFFSET_DISTANCE,
   );
 
-  return [
+  const dims = [
     { ...heightDim, text: formatMeters(height) },
     { ...lengthDim, text: formatMeters(length) },
     { ...bottomTransitionDim, text: formatMeters(bottomTransitionLength) },
@@ -99,4 +102,25 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     { ...widthDim, text: formatMeters(width) },
     { ...ribWidthDim, text: formatMeters(Math.abs(-halfLength - ribBaseX)) },
   ];
+
+  // Distance between the midpoints of two adjacent curve joists — every curve gap is congruent
+  // (equal angular steps on a circular arc, see curveInteriorJoistLocalPoints), so only the
+  // first pair is dimensioned, same "one representative gap" convention spacingDim/ribWidthDim
+  // use. Needs two interior joists to exist; omitted below internalCurveJoistCount 2.
+  const curveJoists = curveInteriorJoistLocalPoints(params);
+  if (curveJoists.length >= 2) {
+    const [x0, y0] = curveJoists[0].point;
+    const [x1, y1] = curveJoists[1].point;
+    // Drawn at the opposite edge (-Z) from bottomTransitionDim/ribWidthDim (+Z), offset further
+    // outward past the ramp — same "push past the structure" convention widthDim uses.
+    const curveJoistSpacingDim = buildLinearDimension(
+      new THREE.Vector3(-halfBottomTransition - x0, y0 + bottomTransitionY, -halfWidth),
+      new THREE.Vector3(-halfBottomTransition - x1, y1 + bottomTransitionY, -halfWidth),
+      new THREE.Vector3(0, 0, -1),
+      OFFSET_DISTANCE,
+    );
+    dims.push({ ...curveJoistSpacingDim, text: formatMeters(Math.hypot(x1 - x0, y1 - y0)) });
+  }
+
+  return dims;
 }

@@ -236,10 +236,10 @@ lines, an offset dimension line with arrowheads, and returns a label position; `
 copies `../obstacle`'s canvas-texture label-sprite approach (`createLabelSprite`) to render
 the text, camera-facing, with no separate DOM overlay to get out of sync.
 
-`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes six dimensions
-analytically from `HalfPipeParams` (same approach as `halfPipeFootprint`/`halfPipeCopingCenters`
-— no need to build the actual rib geometry just to measure it), all anchored to one edge rib
-since every rib is an identical copy of the others:
+`src/dimensions/halfPipeDimensions.ts`'s `buildHalfPipeDimensions` computes up to seven
+dimensions analytically from `HalfPipeParams` (same approach as
+`halfPipeFootprint`/`halfPipeCopingCenters` — no need to build the actual rib geometry just to
+measure it), all anchored to one edge rib since every rib is an identical copy of the others:
 
 - **Height** and **overall length** of one rib (ground to deck; deck to deck) — offset to
   opposite sides (+Z/−Z) of the left edge rib.
@@ -268,6 +268,15 @@ since every rib is an identical copy of the others:
   already covers that). Drawn on the ground, on the same +Z side as the bottom transition
   length dimension and chained off it (its start sits right next to the bottom transition's
   own edge), rather than at deck height on the opposite side.
+- **Curve-joist spacing** — chord (straight-line) distance between the anchor points of the
+  first two `internalCurveJoistCount` interior curve joists, reusing
+  `curveInteriorJoistLocalPoints` (extracted from `buildHalfPipeJoists` in
+  `src/ramps/halfPipe.ts` so both share the same angle math instead of duplicating it). Every
+  curve-joist gap is congruent — equal angular steps on a circular arc — so only the first
+  pair is dimensioned, same "one representative gap" convention as rib spacing above. Drawn at
+  the opposite edge (−Z) from the bottom transition/rib width dimensions, offset further
+  outward past the ramp. Omitted entirely when `internalCurveJoistCount` is below 2 (no pair
+  of interior joists to measure).
 
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.

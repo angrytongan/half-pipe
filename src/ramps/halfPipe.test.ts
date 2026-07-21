@@ -5,6 +5,7 @@ import {
   buildHalfPipeGeometry,
   buildHalfPipeJoists,
   buildHalfPipeRibs,
+  curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
   halfPipeFootprint,
   HALF_PIPE_DEFAULTS,
@@ -577,6 +578,44 @@ describe("buildHalfPipeJoists", () => {
 
     // Uninset, so it's the same thickness x depth cross-section as the bottom-corner joist.
     expect(rightJoist!.boundingBox!.max.x - rightJoist!.boundingBox!.min.x).toBeCloseTo(params.joistThicknessMm / 1000, 6);
+  });
+});
+
+describe("curveInteriorJoistLocalPoints", () => {
+  it("matches the curve-interior joist positions buildHalfPipeJoists actually builds", () => {
+    const params = { ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 5 };
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+    const thickness = params.joistThicknessMm / 1000;
+    const depth = params.joistDepthMm / 1000;
+
+    const curveJoists = curveInteriorJoistLocalPoints(params);
+    expect(curveJoists).toHaveLength(5);
+
+    const joists = buildHalfPipeJoists(params);
+    // Right-side world mapping (angle used as-is, not negated) — see buildHalfPipeJoists'
+    // worldJoists, which negates angle only for the mirrored left side.
+    for (const { point: [x, y], angle } of curveJoists) {
+      const worldX = half + x;
+      const worldY = y + jointDepth;
+      const expectedCenterX = worldX + Math.sin(angle) * (depth / 2);
+      const expectedCenterY = worldY - Math.cos(angle) * (depth / 2);
+
+      const joist = joists.find((j) => {
+        j.computeBoundingBox();
+        const box = j.boundingBox!;
+        const cx = (box.min.x + box.max.x) / 2;
+        const cy = (box.min.y + box.max.y) / 2;
+        return Math.abs(cx - expectedCenterX) < 1e-6 && Math.abs(cy - expectedCenterY) < 1e-6;
+      });
+      expect(joist).toBeDefined();
+      const box = joist!.boundingBox!;
+      expect(box.max.y - box.min.y).toBeCloseTo(thickness * Math.abs(Math.sin(angle)) + depth * Math.abs(Math.cos(angle)), 5);
+    }
+  });
+
+  it("returns an empty array when internalCurveJoistCount is 0", () => {
+    expect(curveInteriorJoistLocalPoints({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 })).toEqual([]);
   });
 });
 
