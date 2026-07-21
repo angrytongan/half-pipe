@@ -18,7 +18,7 @@ import {
 import { ribZPositions } from "./ribs";
 import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
-import { tileFromEdgeClipped } from "./skin";
+import { tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -773,26 +773,6 @@ describe("buildHalfPipeSkinLayer1", () => {
     );
   };
 
-  it("returns curve sheets only — 2 sides x rows x Z columns, cut off at the notch's shelfAngle — no bottom-transition sheets", () => {
-    const params = HALF_PIPE_DEFAULTS;
-    const sweep = notchOf(params).shelfAngle;
-    const rowCount = Math.ceil((params.radius * sweep) / params.skinSheetWidth);
-    const curveZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
-    expect(buildHalfPipeSkinLayer1(params)).toHaveLength(2 * rowCount * curveZColumns.length);
-  });
-
-  it("gives every sheet a Z-span matching its own (possibly edge-clipped) column width", () => {
-    const params = HALF_PIPE_DEFAULTS;
-    const curveZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
-    const expectedSpans = curveZColumns.map(([start, end]) => end - start).sort((a, b) => a - b);
-
-    for (const geometry of buildHalfPipeSkinLayer1(params)) {
-      geometry.computeBoundingBox();
-      const span = geometry.boundingBox!.max.z - geometry.boundingBox!.min.z;
-      expect(expectedSpans.some((s) => Math.abs(s - span) < 1e-5)).toBe(true);
-    }
-  });
-
   /** The last (ground-most) row's own t0/t1/flatExtension, replaying buildHalfPipeSkinLayer1's own row formula. */
   const groundRowOf = (params: HalfPipeParams) => {
     const sweep = notchOf(params).shelfAngle;
@@ -802,6 +782,63 @@ describe("buildHalfPipeSkinLayer1", () => {
     const flatExtension = Math.max(params.skinSheetWidth - params.radius * (t1 - t0), 0);
     return { t0, t1, flatExtension };
   };
+
+  /** Whichever flat-sheet orientation needs fewer sheets, replaying buildHalfPipeSkinLayer1's own comparison. */
+  const flatLayoutOf = (params: HalfPipeParams) => {
+    const reducedHalf = params.bottomTransitionLength / 2 - groundRowOf(params).flatExtension;
+    const longEdgeAlongX = { xSegments: tileCenteredClipped(reducedHalf, params.skinSheetLength), zRows: tileFromEdgeClipped(params.width / 2, params.skinSheetWidth) };
+    const longEdgeAlongZ = { xSegments: tileCenteredClipped(reducedHalf, params.skinSheetWidth), zRows: tileFromEdgeClipped(params.width / 2, params.skinSheetLength) };
+    const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
+    return countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  };
+
+  it("returns curve sheets (2 sides x rows x Z columns, cut off at the notch's shelfAngle) plus flat sheets filling in whatever the curve rows' own flatExtension doesn't reach", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sweep = notchOf(params).shelfAngle;
+    const rowCount = Math.ceil((params.radius * sweep) / params.skinSheetWidth);
+    const curveZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
+    const { xSegments: flatXSegments, zRows: flatZRows } = flatLayoutOf(params);
+    const expectedCount = 2 * rowCount * curveZColumns.length + flatXSegments.length * flatZRows.length;
+    expect(buildHalfPipeSkinLayer1(params)).toHaveLength(expectedCount);
+  });
+
+  it("picks whichever flat-sheet orientation needs fewer sheets, not a fixed long-edge direction", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const { zRows } = flatLayoutOf(params);
+    // for the defaults, tiling the flat region in skinSheetLength-wide Z rows takes fewer
+    // sheets than skinSheetWidth-wide ones would — confirms the comparison actually picked
+    // the long-edge-along-Z orientation here, not just defaulted to long-edge-along-X
+    expect(zRows.every(([s, e]) => e - s <= params.skinSheetLength + 1e-9)).toBe(true);
+    expect(Math.max(...zRows.map(([s, e]) => e - s))).toBeCloseTo(params.skinSheetLength, 5);
+  });
+
+  it("gives every curve sheet a Z-span matching its own column width, and every flat sheet a Z-span matching its own row width", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const curveSpans = tileFromEdgeClipped(params.width / 2, params.skinSheetLength).map(([s, e]) => e - s);
+    const flatSpans = flatLayoutOf(params).zRows.map(([s, e]) => e - s);
+
+    for (const geometry of buildHalfPipeSkinLayer1(params)) {
+      geometry.computeBoundingBox();
+      const span = geometry.boundingBox!.max.z - geometry.boundingBox!.min.z;
+      const expectedSpans = geometry.type === "BoxGeometry" ? flatSpans : curveSpans;
+      expect(expectedSpans.some((s) => Math.abs(s - span) < 1e-5)).toBe(true);
+    }
+  });
+
+  it("butts the flat sheets flush against the curve rows' own flatExtension — no gap, no overlap", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const { flatExtension } = groundRowOf(params);
+    expect(flatExtension).toBeGreaterThan(0); // defaults don't divide the curve evenly — exercise the real case
+
+    const sheets = buildHalfPipeSkinLayer1(params);
+    for (const geometry of sheets) geometry.computeBoundingBox();
+    const flatSheets = sheets.filter((g) => g.type === "BoxGeometry");
+    const maxFlatX = Math.max(...flatSheets.map((g) => g.boundingBox!.max.x));
+    const minFlatX = Math.min(...flatSheets.map((g) => g.boundingBox!.min.x));
+    expect(maxFlatX).toBeCloseTo(half - flatExtension, 5);
+    expect(minFlatX).toBeCloseTo(-(half - flatExtension), 5);
+  });
 
   it("puts a full skinSheetWidth sheet at the notch — reaches it exactly, not a cut sheet", () => {
     const params = HALF_PIPE_DEFAULTS;

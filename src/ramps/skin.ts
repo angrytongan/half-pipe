@@ -79,9 +79,12 @@ export function tileFromEdgeClipped(halfSpan: number, size: number): [number, nu
  * Segments covering [-halfSpan, halfSpan] with up to `size`-wide pieces, the first centered on
  * 0 (clipped to halfSpan if it would overhang — e.g. a sheet longer than the bottom transition
  * is flush, not clipped, is short), the rest tiling outward from there to each edge, clipped
- * short at the boundary rather than overhanging past it.
+ * short at the boundary rather than overhanging past it. Empty if halfSpan isn't positive — e.g.
+ * a curve row's own flatExtension already reaching (or passing) the ramp's own centerline, so
+ * there's nothing left in the middle to cover (see buildHalfPipeSkinLayer1).
  */
 export function tileCenteredClipped(halfSpan: number, size: number): [number, number][] {
+  if (halfSpan <= 0) return [];
   const centerHalf = Math.min(size / 2, halfSpan);
   const segments: [number, number][] = [[-centerHalf, centerHalf]];
   let pos = centerHalf;

@@ -291,33 +291,42 @@ them for free. The select is wired by hand in `main.ts` rather than through `ren
 `resetParams` does, and `renderAllSliderGroups` syncs its displayed value from `currentParams`
 on load/undo/redo/reset.
 
-`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's curved
-coverage — no separate flat bottom-transition coverage and no layer 2 yet (see features.md).
-Rendered wireframe-only (`THREE.LineSegments` + `EdgesGeometry`, not solid `Mesh`, in
-`skinGroup`) since this is for visually checking sheet placement, not final rendering; toggled
-by "Show skin" like the rest of that group. `EdgesGeometry` is given a high threshold angle
-(20°, `main.ts`) so it draws each sheet's real silhouette only — its corners are far sharper
-than that — and drops the shallow-angle seams between the curve's own internal arc facets
-(`SHEET_ARC_SEGMENTS`, skin.ts), which would otherwise clutter the wireframe with lines that
-aren't real sheet edges.
+`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's full coverage —
+curved sheets up the transition plus flat sheets filling in the bottom transition; no layer 2
+yet (see features.md). Rendered wireframe-only (`THREE.LineSegments` + `EdgesGeometry`, not
+solid `Mesh`, in `skinGroup`) since this is for visually checking sheet placement, not final
+rendering; toggled by "Show skin" like the rest of that group. `EdgesGeometry` is given a high
+threshold angle (20°, `main.ts`) so it draws each sheet's real silhouette only — its corners are
+far sharper than that — and drops the shallow-angle seams between the curve's own internal arc
+facets (`SHEET_ARC_SEGMENTS`, skin.ts), which would otherwise clutter the wireframe with lines
+that aren't real sheet edges.
 
-`buildSkinCurveSheet` cuts a "washer" cross-section between two concentric arcs sharing the
-transition's own center — the outer edge exactly on the transition curve, the inner (exposed,
-rideable-side) edge offset inward by `skinLayer1ThicknessMm`. Offsetting a circle by a constant
-distance along its own normal is just a smaller concentric circle, so this is exact, not
-approximated. Tiled in `skinSheetWidth`-wide arc-length rows (not X-projection — bent plywood
-doesn't stretch), grain (the long `skinSheetLength` edge) running parallel to the ramp's width
-(Z), perpendicular to the ribs — the only orientation that lets a sheet bend up the curve at
-all; that's a hard physical constraint, not something `skinGrainDirection` picks. Tiled *from
-the coping notch's own `shelfAngle` (see coping.ts) downward* to the ground tangent — a full
-sheet sits at the notch. The ground-most row usually runs out of curve before it runs out of
-sheet; rather than cut it short there, `curveSheetShape`'s `flatExtension` continues that
+**Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
+arcs sharing the transition's own center — the outer edge exactly on the transition curve, the
+inner (exposed, rideable-side) edge offset inward by `skinLayer1ThicknessMm`. Offsetting a
+circle by a constant distance along its own normal is just a smaller concentric circle, so this
+is exact, not approximated. Tiled in `skinSheetWidth`-wide arc-length rows (not X-projection —
+bent plywood doesn't stretch), grain (the long `skinSheetLength` edge) running parallel to the
+ramp's width (Z), perpendicular to the ribs — the only orientation that lets a sheet bend up the
+curve at all; that's a hard physical constraint, not something `skinGrainDirection` picks. Tiled
+*from the coping notch's own `shelfAngle` (see coping.ts) downward* to the ground tangent — a
+full sheet sits at the notch. The ground-most row usually runs out of curve before it runs out
+of sheet; rather than cut it short there, `curveSheetShape`'s `flatExtension` continues that
 leftover length flat, past the ground tangent and onto the bottom transition (only when its own
 `t0` is exactly 0 — nothing to attach a lead-in to otherwise) — the same way a real sheet just
-lies flat once the surface under it stops bending. The rest of the bottom transition (whatever
-this doesn't reach) still isn't covered — see features.md. Tiled across Z in `skinSheetLength`
-columns (`tileFromEdgeClipped`, skin.ts), clipped at the ramp's edges (±width/2) instead of
-overhanging.
+lies flat once the surface under it stops bending. Tiled across Z in `skinSheetLength` columns
+(`tileFromEdgeClipped`, skin.ts), clipped at the ramp's edges (±width/2) instead of overhanging.
+
+**Flat sheets**: `buildSkinFlatSheet`, plain boxes filling in whatever of the bottom transition
+the curve rows' own `flatExtension` doesn't already reach — nothing bends there, so there's no
+grain constraint on orientation, unlike the curve sheets. Both orientations (long edge along X,
+long edge along Z) are tiled and compared, and whichever needs fewer total sheets wins (ties
+keep long-edge-X) — forcing one direction can mean more cuts/wasted offcuts than the ramp's own
+proportions actually call for. Centered at X=0 (`tileCenteredClipped`, skin.ts), tiled outward,
+clipped to `±(half - flatExtension)` (both curve rows share the same `flatExtension`, by
+left/right symmetry) so they butt flush against the curve rows' own reach — no gap, no overlap.
+Empty if that reach alone already covers to the ramp's centerline (`tileCenteredClipped` returns
+`[]` for a non-positive span). Also clipped at the ramp's edges (±width/2).
 
 ## Dimension lines
 

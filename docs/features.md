@@ -23,29 +23,25 @@ created by the joists and ribs, which provides the surface to skate on. We use
 multiple layers instead of a single thick one so we're able to bend the
 plywood without breaking it.
 
-Layer 1's curved coverage is built (`src/ramps/skin.ts` + `halfPipe.ts`'s
-`buildHalfPipeSkinLayer1`, see status.md): sheets up the transition, cut off
-at the coping notch, clipped at the ramp's edges, grain forced perpendicular
-to the ribs so they can bend. Tiled from the notch downward so a full sheet
-sits there (not a cut one). The ground-most row's own leftover (once the
-curve runs out but the sheet hasn't) continues flat onto the bottom
-transition instead of stopping cut at the seam — `curveSheetShape`'s
-`flatExtension`. Rendered wireframe (each sheet's real outline only, not
-its internal curve-approximation facets — see status.md), to check
-placement, not as final geometry/material.
-
-The rest of the bottom transition — whatever a curve row's own flat
-extension doesn't reach — still has no coverage of its own.
+Layer 1's full coverage is built (`src/ramps/skin.ts` + `halfPipe.ts`'s
+`buildHalfPipeSkinLayer1`, see status.md): curved sheets up the transition,
+cut off at the coping notch, clipped at the ramp's edges, grain forced
+perpendicular to the ribs so they can bend, tiled from the notch downward
+so a full sheet sits there (not a cut one); plus flat sheets on the bottom
+transition, centered at X=0, oriented whichever way (long edge along X or
+along Z) needs fewer sheets — no grain constraint there, so a fixed
+direction would just risk more cuts/wasted offcuts than necessary. The
+ground-most curve row's
+own leftover (once the curve runs out but the sheet hasn't) continues flat
+onto the bottom transition instead of stopping cut at the seam
+(`curveSheetShape`'s `flatExtension`) — the flat sheets are clipped to
+whatever that doesn't already reach, so the two butt flush against each
+other with no gap or overlap. Rendered wireframe (each sheet's real
+outline only, not its internal curve-approximation facets — see
+status.md), to check placement, not as final geometry/material.
 
 Remaining:
 
-- [ ] The bottom transition's own flat sheets (centered at X=0, tiled
-      outward, `tileCenteredClipped`/`buildSkinFlatSheet` in skin.ts —
-      both still there, just unused) for whatever a curve row's flat
-      extension doesn't reach. Needs a rule for how the two meet — does a
-      flat sheet butt against the curve row's extension, overlap it, or
-      does the extension's own reach change how the flat sheets are laid
-      out at all?
 - [ ] Layer 2 — sits on top of layer 1, not yet built or described in detail
       (its own placement rules, e.g. whether it staggers seams against layer
       1, haven't been specified).
