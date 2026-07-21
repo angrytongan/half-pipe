@@ -16,20 +16,37 @@ Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for th
       `obstacle`'s dimension code has this either, and `buildLinearDimension`
       only handles straight measurements.
 
-## Coping
+## Skinning
 
-- [ ] Reposition `wallTop`'s Y to start from the deck's actual top surface
-      too. `copingNotch` (`src/ramps/coping.ts`) now measures both
-      protrusion specs from the covered surface rather than the bare rib:
-      `copingVerticalProtrusionMm` (and so the shelf) from the deck
-      board's real top surface (`cornerY + deckThickness`, see
-      `buildHalfPipeDeck`), and `copingHorizontalProtrusionMm` (and so
-      the wall's X, `wallX`/`pipeCenterX`) from the skinned curve's own
-      surface (`cornerX - skinThickness`, `skinLayer1ThicknessMm +
-      skinLayer2ThicknessMm` — subtracted, since the curve's rideable side
-      faces the ramp's interior/smaller X at this corner, the opposite
-      sign from the deck's own `+deckThickness`). `wallTop`'s Y is the one piece still
-      unrepositioned — it anchors directly to the bare rib corner's own Y
-      (`points[points.length - 2]` from `transitionAndDeckPoints`) rather
-      than `cornerY + deckThickness`, so the wall's top currently sits
-      `deckThickness` below where the deck board actually is.
+Skinning is the process of laying down plywood sheets on top of the frame
+created by the joists and ribs, which provides the surface to skate on. We use
+multiple layers instead of a single thick one so we're able to bend the
+plywood without breaking it.
+
+Layer 1's own tiling is built (`src/ramps/skin.ts` + `halfPipe.ts`'s
+`buildHalfPipeSkinLayer1`, see status.md): curved sheets up the transition
+(cut off at the coping notch, clipped at the ramp's edges, grain forced
+perpendicular to the ribs so they can bend) plus flat sheets on the bottom
+transition (long edge along the ribs' own direction, no bending needed).
+Rendered solid, one shade of green per sheet, to check placement, not as final geometry/material.
+
+Remaining:
+
+- [ ] Layer 2 — sits on top of layer 1, not yet built or described in detail
+      (its own placement rules, e.g. whether it staggers seams against layer
+      1, haven't been specified).
+- [ ] A sheet that would cross from the bottom transition onto a rib is
+      currently just clipped at that seam (two separate sheets meeting at
+      ±half) instead of modeled as one real board spanning both zones with
+      the curve's own grain orientation for its curved portion.
+- [ ] `skinGrainDirection` isn't consumed by any geometry yet — on the curve,
+      grain orientation is a hard physical constraint (perpendicular to the
+      ribs, so the sheet can bend), not a free choice, so it's unclear where
+      this control would actually apply.
+- [ ] Waste-minimization/packing beyond simple deterministic tiling (e.g.
+      reusing an off-cut from one row as the start of the next) — sheets are
+      currently laid out edge-to-edge and clipped, not optimized to minimize
+      scrap.
+- [ ] Real final material/rendering (right now every sheet is an arbitrary
+      shade of green, purely to tell sheets apart), once the layout itself
+      is confirmed correct.

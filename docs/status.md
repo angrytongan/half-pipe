@@ -278,18 +278,45 @@ coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to
 
 ### Skin
 
-Controls only so far — no plywood geometry/rendering yet (tracked in features.md). A "Skin"
-section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the ground) and
-`skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default 12mm each; two
-more, `skinSheetLength`/`skinSheetWidth` (1–3.6m / 0.6–1.5m, default 2.4m/1.2m — a standard
-"8×4" sheet); and a `skinGrainDirection` select (`"length-ways"` default / `"width-ways"`,
-`SkinGrainDirection` in `halfPipe.ts`) for which way a sheet is laid relative to the ribs —
-length-ways runs the sheet's major axis perpendicular to the ribs (bending across the minor
-axis), width-ways the reverse. All are `HalfPipeParams` fields like everywhere else, so undo/
-redo and "Reset to defaults" already cover them for free. The select is wired by hand in
-`main.ts` rather than through `renderSliderList` (that helper is number-only) — its `change`
-listener records an undo snapshot the same way `resetParams` does, and `renderAllSliderGroups`
-syncs its displayed value from `currentParams` on load/undo/redo/reset.
+A "Skin" section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the
+ground) and `skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default
+12mm each; two more, `skinSheetLength`/`skinSheetWidth` (1–3.6m / 0.6–1.5m, default 2.4m/1.2m —
+a standard "8×4" sheet); and a `skinGrainDirection` select (`"length-ways"` default /
+`"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way a sheet is laid relative to
+the ribs — length-ways runs the sheet's major axis perpendicular to the ribs (bending across the
+minor axis), width-ways the reverse; not yet consumed by any geometry (see below). All are
+`HalfPipeParams` fields like everywhere else, so undo/redo and "Reset to defaults" already cover
+them for free. The select is wired by hand in `main.ts` rather than through `renderSliderList`
+(that helper is number-only) — its `change` listener records an undo snapshot the same way
+`resetParams` does, and `renderAllSliderGroups` syncs its displayed value from `currentParams`
+on load/undo/redo/reset.
+
+`src/ramps/skin.ts` + `halfPipe.ts`'s `buildHalfPipeSkinLayer1` build layer 1's own sheet
+layout — no layer 2 yet (see features.md). Rendered solid (`skinGroup` in `main.ts`), one
+`MeshStandardMaterial` per sheet, all the same green hue (`SKIN_HUE`) but a different lightness
+each (`0.25` to `0.75`, spread evenly across however many sheets there are) so individual sheets
+are distinguishable for a placement check, not because it's the intended final material.
+Toggled by "Show skin" like the rest of that group.
+
+Two kinds of sheet, tiled separately:
+- **Curve sheets**: `buildSkinCurveSheet` cuts a "washer" cross-section between two concentric
+  arcs sharing the transition's own center — the outer edge exactly on the transition curve, the
+  inner (exposed, rideable-side) edge offset inward by `skinLayer1ThicknessMm`. Offsetting a
+  circle by a constant distance along its own normal is just a smaller concentric circle, so this
+  is exact, not approximated. Tiled up from the ground tangent in `skinSheetWidth`-wide arc-length
+  rows (not X-projection — bent plywood doesn't stretch), grain (the long `skinSheetLength` edge)
+  running parallel to the ramp's width (Z), perpendicular to the ribs — the only orientation that
+  lets a sheet bend up the curve at all; that's a hard physical constraint, not something
+  `skinGrainDirection` picks. Cut off at the coping notch's own `shelfAngle` (see coping.ts), not
+  the bare curve's full sweep. Tiled across Z in `skinSheetLength` columns
+  (`tileFromEdgeClipped`, skin.ts), clipped at the ramp's edges (±width/2) instead of overhanging.
+- **Flat sheets**: `buildSkinFlatSheet`, plain boxes on the bottom transition, where nothing
+  needs to bend so grain direction is a layout choice, not a constraint — long edge along X
+  instead. First sheet centered at X=0 (`tileCenteredClipped`, skin.ts), tiled outward, clipped
+  at ±half (the rib boundary) rather than overhanging onto a rib. A sheet that would have to
+  cross onto a rib is, for now, simply clipped at that seam rather than modeled as one board
+  spanning both zones with the curve's own grain orientation for its curved portion — see
+  features.md.
 
 ## Dimension lines
 

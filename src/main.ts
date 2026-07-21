@@ -5,6 +5,7 @@ import {
   buildHalfPipeDeck,
   buildHalfPipeJoistsBySection,
   buildHalfPipeRibsBySection,
+  buildHalfPipeSkinLayer1,
   HALF_PIPE_DEFAULTS,
   halfPipeCopingCenters,
   halfPipeFootprint,
@@ -46,6 +47,8 @@ interface RampSpec {
   buildDeck: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // The bottom transition's own framing — a stud wall lying on the ground.
   buildBottomTransitionFrame: (params: HalfPipeParams) => THREE.BufferGeometry[];
+  // Layer 1 skin, curved coverage over the transition only so far (see buildHalfPipeSkinLayer1).
+  buildSkinLayer1: (params: HalfPipeParams) => THREE.BufferGeometry[];
   // Centers (in the built geometry's own centered coordinate space) of the coping tubes —
   // the curve/deck lip, not the deck's outer edge. See decisions.md.
   copingCenters: (params: HalfPipeParams) => { x: number; y: number }[];
@@ -93,6 +96,7 @@ const RAMP: RampSpec = {
   buildJoistsBySection: buildHalfPipeJoistsBySection,
   buildDeck: buildHalfPipeDeck,
   buildBottomTransitionFrame: buildBottomTransitionFrame,
+  buildSkinLayer1: buildHalfPipeSkinLayer1,
   copingCenters: halfPipeCopingCenters,
   footprint: halfPipeFootprint,
   buildDimensions: buildHalfPipeDimensions,
@@ -196,7 +200,9 @@ const copingMaterial = new THREE.MeshStandardMaterial({ color: 0x999999, metalne
 const copingGroup = new THREE.Group();
 scene.add(copingGroup);
 
-// Future home for skin geometry (not built yet) — "Show skin" already toggles its visibility.
+// Each sheet gets its own shade of green (varied lightness, same hue) so individual sheets are
+// distinguishable — see buildHalfPipeSkinLayer1/rebuildRamp.
+const SKIN_HUE = 1 / 3; // green
 const skinGroup = new THREE.Group();
 skinGroup.visible = false;
 scene.add(skinGroup);
@@ -468,6 +474,29 @@ function rebuildRamp(): void {
     member.castShadow = true;
     bottomTransitionGroup.add(member);
   }
+
+  for (const child of skinGroup.children) {
+    if (child instanceof THREE.Mesh) {
+      child.geometry.dispose();
+      (child.material as THREE.Material).dispose();
+    }
+  }
+  skinGroup.clear();
+  const skinSheets = RAMP.buildSkinLayer1(currentParams);
+  skinSheets.forEach((geometry, i) => {
+    const lightness = 0.25 + (0.5 * i) / Math.max(1, skinSheets.length - 1); // spreads shades across the whole set, not clustered
+    // side: DoubleSide — the left side's sheets are built by mirroring (geometry.scale(-1,1,1) in
+    // buildHalfPipeSkinLayer1), which flips winding without correcting it, same as the ribs (see
+    // `material` above); sidesteps verifying triangle winding on the mirrored geometry.
+    const skinMaterial = new THREE.MeshStandardMaterial({
+      color: new THREE.Color().setHSL(SKIN_HUE, 0.6, lightness),
+      flatShading: true,
+      side: THREE.DoubleSide,
+    });
+    const sheet = new THREE.Mesh(geometry, skinMaterial);
+    sheet.castShadow = true;
+    skinGroup.add(sheet);
+  });
 
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);

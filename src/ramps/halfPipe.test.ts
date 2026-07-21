@@ -8,14 +8,17 @@ import {
   buildHalfPipeJoistsBySection,
   buildHalfPipeRibs,
   buildHalfPipeRibsBySection,
+  buildHalfPipeSkinLayer1,
   curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
   halfPipeFootprint,
   HALF_PIPE_DEFAULTS,
+  type HalfPipeParams,
 } from "./halfPipe";
 import { ribZPositions } from "./ribs";
 import { transitionAndDeckPoints } from "./transition";
 import { copingNotch } from "./coping";
+import { tileCenteredClipped, tileFromEdgeClipped } from "./skin";
 
 describe("buildHalfPipeGeometry", () => {
   it("still touches the ground at the deck-side closing edges regardless of joistDepth", () => {
@@ -753,6 +756,118 @@ describe("buildHalfPipeDeck", () => {
       expect(box.min.y).toBeCloseTo(deckJoistTopY, 6);
       expect(box.max.y - box.min.y).toBeCloseTo(0.025, 6);
     }
+  });
+});
+
+describe("buildHalfPipeSkinLayer1", () => {
+  const notchOf = (params: HalfPipeParams) => {
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    return copingNotch(
+      points,
+      params.radius,
+      params.copingOdMm / 1000 / 2,
+      params.copingHorizontalProtrusionMm / 1000,
+      params.copingVerticalProtrusionMm / 1000,
+      params.ribThicknessMm / 1000,
+      (params.skinLayer1ThicknessMm + params.skinLayer2ThicknessMm) / 1000,
+    );
+  };
+
+  it("returns curve sheets (2 sides x rows x Z columns, cut off at the notch's shelfAngle) plus flat bottom-transition sheets (X segments x Z rows)", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sweep = notchOf(params).shelfAngle;
+    const rowCount = Math.ceil((params.radius * sweep) / params.skinSheetWidth);
+    const curveZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
+    const flatXSegments = tileCenteredClipped(params.bottomTransitionLength / 2, params.skinSheetLength);
+    const flatZRows = tileFromEdgeClipped(params.width / 2, params.skinSheetWidth);
+    const expectedCount = 2 * rowCount * curveZColumns.length + flatXSegments.length * flatZRows.length;
+    expect(buildHalfPipeSkinLayer1(params)).toHaveLength(expectedCount);
+  });
+
+  it("gives every curve sheet a Z-span matching its own (possibly edge-clipped) column width", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const curveZColumns = tileFromEdgeClipped(params.width / 2, params.skinSheetLength);
+    const expectedSpans = curveZColumns.map(([start, end]) => end - start).sort((a, b) => a - b);
+
+    const curveSheets = buildHalfPipeSkinLayer1(params).filter((g) => g.type === "ExtrudeGeometry");
+    const rowCount = Math.ceil((params.radius * notchOf(params).shelfAngle) / params.skinSheetWidth);
+    expect(curveSheets).toHaveLength(2 * rowCount * curveZColumns.length);
+
+    for (const geometry of curveSheets) {
+      geometry.computeBoundingBox();
+      const span = geometry.boundingBox!.max.z - geometry.boundingBox!.min.z;
+      expect(expectedSpans.some((s) => Math.abs(s - span) < 1e-5)).toBe(true);
+    }
+  });
+
+  it("gives every flat sheet a Z-span matching its own (possibly edge-clipped) row width, and clips its X extent within ±half", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const flatZRows = tileFromEdgeClipped(params.width / 2, params.skinSheetWidth);
+    const expectedSpans = flatZRows.map(([start, end]) => end - start).sort((a, b) => a - b);
+
+    for (const geometry of buildHalfPipeSkinLayer1(params).filter((g) => g.type === "BoxGeometry")) {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      const span = box.max.z - box.min.z;
+      expect(expectedSpans.some((s) => Math.abs(s - span) < 1e-5)).toBe(true);
+      expect(box.min.x).toBeGreaterThanOrEqual(-half - 1e-9);
+      expect(box.max.x).toBeLessThanOrEqual(half + 1e-9);
+    }
+  });
+
+  it("cuts curve sheets off at the coping notch's shelfAngle, not the bare curve's full sweep", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const notch = notchOf(params);
+    const shelfWorldX = half + params.radius * Math.sin(notch.shelfAngle);
+
+    const curveSheets = buildHalfPipeSkinLayer1(params).filter((g) => g.type === "ExtrudeGeometry");
+    for (const geometry of curveSheets) geometry.computeBoundingBox();
+    const maxRightX = Math.max(
+      ...curveSheets.filter((g) => (g.boundingBox!.min.x + g.boundingBox!.max.x) / 2 > 0).map((g) => g.boundingBox!.max.x),
+    );
+    expect(maxRightX).toBeLessThanOrEqual(shelfWorldX + 1e-6);
+  });
+
+  it("starts the bottom row flush with the joists' top face, at the ground tangent (world X = ±half)", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const half = params.bottomTransitionLength / 2;
+    const jointDepth = params.joistDepthMm / 1000;
+
+    const sheets = buildHalfPipeSkinLayer1(params);
+    const rightBottomRow = sheets.filter((geometry) => {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      return (box.min.x + box.max.x) / 2 > 0;
+    });
+    const minX = Math.min(...rightBottomRow.map((g) => g.boundingBox!.min.x));
+    const minY = Math.min(...rightBottomRow.map((g) => g.boundingBox!.min.y));
+    expect(minX).toBeCloseTo(half, 5);
+    expect(minY).toBeCloseTo(jointDepth, 5);
+  });
+
+  it("mirrors left/right about X=0", () => {
+    const sheets = buildHalfPipeSkinLayer1(HALF_PIPE_DEFAULTS);
+    const xExtents = sheets.map((geometry) => {
+      geometry.computeBoundingBox();
+      return (geometry.boundingBox!.min.x + geometry.boundingBox!.max.x) / 2;
+    });
+    const right = xExtents.filter((x) => x > 0);
+    const left = xExtents.filter((x) => x < 0);
+    expect(right).toHaveLength(left.length);
+  });
+
+  it("tiles Z columns starting at -width/2", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sheets = buildHalfPipeSkinLayer1(params);
+    const minZ = Math.min(
+      ...sheets.map((geometry) => {
+        geometry.computeBoundingBox();
+        return geometry.boundingBox!.min.z;
+      }),
+    );
+    expect(minZ).toBeCloseTo(-params.width / 2, 5);
   });
 });
 
