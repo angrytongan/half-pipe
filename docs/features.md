@@ -68,6 +68,3 @@ Remaining:
       reusing an off-cut from one row as the start of the next) — sheets are
       currently laid out edge-to-edge and clipped, not optimized to minimize
       scrap.
-- [ ] Real final material/rendering (right now layer 1 is an arbitrary shade
-      of green and layer 2 is translucent red, purely to tell sheets and
-      layers apart), once the layout itself is confirmed correct.

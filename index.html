@@ -261,14 +261,89 @@
         background: var(--unsafe-bg);
         color: var(--unsafe-color);
       }
-      #viewport {
+      .main-tabs {
         flex: 1;
         min-width: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden; /* clips tab-panel content (e.g. the canvas) to the card's rounded corners */
+      }
+      .tab-bar {
+        flex-shrink: 0;
+        display: flex;
+        border-bottom: 1px solid var(--border);
+      }
+      .tab-btn {
+        background: none;
+        border: none;
+        padding: 0.6rem 1rem;
+        font: inherit;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--text);
+        opacity: 0.6;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+      }
+      .tab-btn[aria-selected="true"] {
+        opacity: 1;
+        border-bottom-color: var(--text);
+      }
+      .tab-panel {
+        flex: 1;
+        min-height: 0;
         position: relative;
-        overflow: hidden; /* clips the canvas's square corners to the card's rounded ones */
       }
       #viewport canvas {
         display: block;
+      }
+      .placeholder-text {
+        padding: 1rem;
+        opacity: 0.6;
+        font-size: 0.9rem;
+      }
+      #drawings-list {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr));
+        gap: 1.5rem;
+        padding: 1.5rem;
+        box-sizing: border-box;
+        align-content: start;
+      }
+      .drawing-card h3 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+      }
+      .drawing-card svg {
+        width: 100%;
+        aspect-ratio: 1;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+      }
+      .part-outline {
+        fill: none;
+        stroke: var(--text);
+        stroke-width: 1.5px;
+        vector-effect: non-scaling-stroke;
+      }
+      .dim-extension,
+      .dim-line {
+        stroke: var(--pill-color);
+        stroke-width: 1px;
+        vector-effect: non-scaling-stroke;
+      }
+      .dim-arrow {
+        fill: var(--pill-color);
+      }
+      .dim-label,
+      .part-note {
+        fill: var(--text);
+        text-anchor: middle;
+        dominant-baseline: middle;
       }
       .overlay-card {
         position: absolute;
@@ -276,6 +351,67 @@
         left: 1rem;
         padding: 0.6rem 0.8rem;
         z-index: 1;
+      }
+      /* The drawings tab is the only part of this SPA meant to leave the browser: everything
+         else (header, sliders panel, tab bar) is on-screen chrome with nothing to print, and
+         the tab/viewport layout below is positioned/sized for a screen viewport, not a page
+         flow that a printer can paginate across multiple sheets. Placed last in the stylesheet
+         (after .part-outline/.dim-*/.drawing-card h3's own unconditional rules) so it actually
+         wins the cascade at equal specificity — an earlier position lost to those later,
+         non-media-queried rules even while printing. */
+      @media print {
+        .app-header,
+        #panel,
+        .tab-bar {
+          display: none;
+        }
+        body,
+        .app,
+        .main-tabs {
+          height: auto;
+          overflow: visible;
+        }
+        .app {
+          display: block;
+          padding: 0;
+        }
+        .main-tabs {
+          border: none;
+          box-shadow: none;
+        }
+        #drawings-list {
+          position: static;
+          overflow: visible;
+          grid-template-columns: 1fr;
+          padding: 0;
+        }
+        .drawing-card {
+          break-inside: avoid;
+          break-after: page;
+        }
+        .drawing-card svg {
+          width: 100%;
+          aspect-ratio: auto;
+          height: 90vh;
+          border: none;
+          background: #fff;
+        }
+        /* Printed drawings need to read as plain black-on-white regardless of the app's own
+           theme colors (--text/--pill-color can be light in dark mode, or a non-black tint in
+           light mode) — paper has no dark mode. */
+        .drawing-card h3 {
+          color: #000;
+        }
+        .part-outline,
+        .dim-extension,
+        .dim-line {
+          stroke: #000;
+        }
+        .dim-arrow,
+        .dim-label,
+        .part-note {
+          fill: #000;
+        }
       }
     </style>
   </head>
@@ -375,8 +511,27 @@
         </details>
         <button type="button" id="reset-btn">Reset to defaults</button>
       </div>
-      <div id="viewport" class="card">
-        <div id="space-status" class="card overlay-card"></div>
+      <div class="main-tabs card">
+        <div class="tab-bar" role="tablist">
+          <button type="button" class="tab-btn" role="tab" aria-selected="true" aria-controls="viewport">
+            3D view
+          </button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-drawings">
+            2D drawings
+          </button>
+          <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-bom">
+            Bill of materials
+          </button>
+        </div>
+        <div id="viewport" class="tab-panel" role="tabpanel">
+          <div id="space-status" class="card overlay-card"></div>
+        </div>
+        <div id="tab-drawings" class="tab-panel" role="tabpanel" hidden>
+          <div id="drawings-list"></div>
+        </div>
+        <div id="tab-bom" class="tab-panel" role="tabpanel" hidden>
+          <p class="placeholder-text">Bill of materials — coming soon.</p>
+        </div>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

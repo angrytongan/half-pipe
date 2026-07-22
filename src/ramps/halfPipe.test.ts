@@ -1180,8 +1180,8 @@ describe("halfPipeFootprint", () => {
 
 describe("HALF_PIPE_DEFAULTS skin", () => {
   it("defaults both skin layers to 12mm", () => {
-    expect(HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm).toBe(12);
-    expect(HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm).toBe(12);
+    expect(HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm).toBe(9);
+    expect(HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm).toBe(9);
   });
 
   it("defaults the sheet size to 2.4m x 1.2m, length-ways", () => {

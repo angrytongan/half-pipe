@@ -280,7 +280,7 @@ coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to
 
 A "Skin" section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the
 ground) and `skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default
-12mm each; four more for sheet size — `skinSheetLength`/`skinSheetWidth` for layer 1 and
+9mm each; four more for sheet size — `skinSheetLength`/`skinSheetWidth` for layer 1 and
 `skinLayer2SheetLength`/`skinLayer2SheetWidth` for layer 2, independent of each other (1–3.6m /
 0.6–1.5m, default 2.4m/1.2m each — a standard "8×4" sheet); and a `skinGrainDirection` select
 (`"length-ways"` default / `"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way
@@ -429,6 +429,63 @@ A "Show dimensions" checkbox (`#dimensions-toggle`, top of `#panel`) toggles
 `dimensionsGroup.visible` directly — no rebuild involved, since the group and its contents
 already exist regardless of visibility.
 
+## 2D drawings
+
+The "2D drawings" tab (see Scene below) shows one labeled, dimensioned SVG per *repeated* part
+— every rib is an identical copy of the others, every curve/deck joist shares the same
+cross-section and (since `ribZPositions` spaces sections evenly) the same length, and so on —
+so drawing every instance would just repeat the same shape. `src/drawings/` holds this, kept
+separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Line`/
+`ArrowHelper`-based) rather than folded into it:
+
+- **`svgDimension.ts`**'s `buildLinearDimension2D` is `dimensionLine.ts`'s CAD-style
+  (extension lines + offset dimension line + outward-pointing arrowheads + label position)
+  convention, redone in plain `[number, number]` tuples instead of `THREE.Vector3` — 2D, and
+  SVG has no cone primitive, so arrowheads are plain triangle polygons instead of
+  `ArrowHelper`. `arrowLength`/`arrowWidth` are explicit parameters rather than fixed constants
+  (unlike `dimensionLine.ts`'s `ARROW_LENGTH`/`ARROW_WIDTH`) since parts here span wildly
+  different scales — a ~2m rib profile and a 45×90mm joist cross-section can't share one fixed
+  arrow size and still look right.
+- **`halfPipePartDrawings.ts`** builds each part's outline + dimensions + text labels (all in
+  mm, converted from `HalfPipeParams`' own mix of m/mm fields) as plain data, no rendering:
+  - **Rib** — traces `ribLocalProfilePoints` (extracted from `halfPipe.ts`'s `halfPipeOutline`,
+    which now just mirrors/places two copies of it either side of the bottom transition), so
+    the drawing can't drift from what's actually extruded for every rib in the 3D view —
+    including its two fictitious ground-closing edges (see decisions.md/`halfPipeOutline`),
+    since those are what's actually rendered, not a hypothetically "more correct" outline.
+    Only the overall envelope (height, base run) gets a dimension line; radius, transition
+    angle, vert height (when present), and deck length are text labels instead — an
+    angular-dimension variant isn't built anywhere yet (see features.md), so hand-dimensioning
+    the curve/notch itself would be new scope, not reuse. Rib thickness (the extrusion depth,
+    not drawable in a flat profile view) is a text label too.
+  - **Deck board** — a length (`deckBoardLength`, also extracted from `halfPipe.ts`'s
+    `buildHalfPipeDeck`) × width (`width`) rectangle, ribThicknessMm labeled.
+  - **Joist** — length (one bay's own clear span, from `ribZPositions`' first pair — every
+    curve/deck joist shares it) × depth (`joistDepthMm`) rectangle, joistThicknessMm labeled.
+  - **Bottom transition plate** and **stud** — two separate drawings, same joist cross-section
+    but different lengths (`bottomTransitionMemberLengths`, extracted from
+    `buildBottomTransitionFrame`): the plate runs the bottom transition's own length, the stud
+    spans between the plates' inside faces.
+  - **Skin layer 1/2 sheet** — the *flat* sheet-size params (`skinSheetLength`/`skinSheetWidth`,
+    `skinLayer2SheetLength`/`skinLayer2SheetWidth`) as a rectangle, thickness labeled — the
+    stock size before it's bent onto the curve, not any of the tiled/clipped as-installed
+    pieces `skin.ts` actually cuts (see Skin above).
+
+  Every non-rib part is built through one shared `rectanglePartDrawing` helper (a box's own
+  length × height rectangle, third dimension as a text label) rather than six near-identical
+  one-off shapes.
+- **`renderPartDrawing.ts`** turns one `PartDrawing` into a standalone `<svg>`: computes a
+  viewBox from the outline + dimension-line + label extents (with padding for arrowheads/text),
+  picks one arrow length/width/font size per drawing (a fixed fraction of that drawing's own
+  bounding diagonal, so a rib drawing's arrows aren't a joist drawing's arrows), and writes
+  plain markup via `innerHTML` rather than a tree of `createElementNS` calls. Y is negated on
+  every coordinate right before it's written (SVG's Y axis points down; the geometry above is
+  Y-up) instead of an SVG-level flip transform, which would also mirror the text.
+
+`src/main.ts`'s `rebuildPartDrawings` (called from `rebuildRamp`, same as `rebuildDimensions`)
+clears and rebuilds `#drawings-list` from `allPartDrawings(currentParams)` every time — cheap
+DOM/SVG work, so it's rebuilt unconditionally rather than only when that tab is visible.
+
 ## Scene
 
 `src/main.ts`: `PerspectiveCamera` + stock `OrbitControls` (no damping,
@@ -471,12 +528,12 @@ Two checkboxes, "Show layer 1" (`#skin-layer1-toggle`) and "Show layer 2"
 (`#skin-layer2-toggle`), both under "Show scale" and unchecked by default, replace the old
 single "Show skin" toggle — each hooked up to exactly its own layer (`skinGroup`/
 `skinLayer2Group`), so either can be shown independently to compare them. `updateSkinVisibility`
-(shared by both toggles' `input` listeners) also hides `bottomTransitionGroup`,
-`curveJoistGroup`, and `internalRibGroup` (structure either layer would cover or bury) whenever
-*either* layer is checked — same direct-`.visible` pattern as the dimensions/scale toggles
-above, so the hidden/shown state survives param changes without re-wiring. `deckJoistGroup` and
-`edgeRibGroup` aren't touched either way — the deck/ground joists and the two mandatory edge
-ribs stay visible regardless (they still show through/around a skin, not buried by it).
+(shared by both toggles' `input` listeners) hides `bottomTransitionGroup` and `curveJoistGroup`
+(structure layer 1 would cover) whenever "Show layer 1" is checked — same direct-`.visible`
+pattern as the dimensions/scale toggles above, so the hidden/shown state survives param changes
+without re-wiring. `internalRibGroup`, `deckJoistGroup`, and `edgeRibGroup` aren't touched by
+either toggle — the internal ribs, deck/ground joists, and the two mandatory edge ribs stay
+visible regardless (structure the user still needs to see even with a skin layer shown).
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
@@ -493,15 +550,26 @@ reset-view button and "Show dimensions" toggle, at the top, then an accordion of
 independently-collapsible sections — Available space, Ramp parameters,
 Ribs, Joists, Bottom transition, Coping, Skin, each a plain native
 `<details>`/`<summary>` so no JS is needed, all closed by default on page load (no `open`
-attribute on any of them) — then the reset-to-defaults button) and `#viewport` (3D view) cards.
+attribute on any of them) — then the reset-to-defaults button) and a `.main-tabs` card.
+
+`.main-tabs` holds a `.tab-bar` (three plain `<button role="tab">`s — "3D view", "2D drawings",
+"Bill of materials" — native buttons, no roving-tabindex ARIA tablist keyboard pattern, since
+click/Enter/Space/focus already come free) above three `.tab-panel`s, only one visible
+(`hidden` attribute) at a time. `main.ts` wires each button's click to set `aria-selected` and
+toggle its own panel's `hidden` via `aria-controls`. `#viewport` (the 3D view, unchanged from
+before tabs existed) is the first/default panel; `#tab-drawings` holds `#drawings-list` (see
+2D drawings above); `#tab-bom` is still a `.placeholder-text` ("coming soon") — bill of
+materials isn't built yet, see features.md. `.main-tabs` itself carries the `.card`
+look/`overflow: hidden` (so canvas/SVG corners still clip to the rounded card regardless of
+which tab is active) that used to sit directly on `#viewport`.
+
 The Skin section itself groups its sliders under two `.subsection-label` headings, "Layer 1" and
 "Layer 2", each labeling its own `renderSliderList` container (`skin-layer1-sliders`/
-`skin-layer2-sliders`) — plain, static text, not collapsible on their own. Both share a `.card`
-class
-(border/radius/shadow/opaque background — `var(--card-bg)`); `#viewport`
-additionally hosts a small `.overlay-card` (the space-status pills,
+`skin-layer2-sliders`) — plain, static text, not collapsible on their own. `#panel` and
+`.main-tabs` share a `.card` class (border/radius/shadow/opaque background — `var(--card-bg)`);
+`#viewport` additionally hosts a small `.overlay-card` (the space-status pills,
 top-left), positioned absolutely inside it (`position: relative` on
-`#viewport`) so it stays in view over the 3D scene regardless of panel
+`.tab-panel`) so it stays in view over the 3D scene regardless of panel
 state. `.overlay-card` carries `class="card overlay-card"` and adds no
 background of its own — it inherits `.card`'s, so it's always exactly the
 same color as `#panel`, opaque enough to stay legible over whatever's

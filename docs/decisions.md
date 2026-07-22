@@ -7,7 +7,7 @@ Scope/architecture decisions, so they don't need re-asking each session. Update 
 - **Standalone geometry code**, same as `../obstacle`'s own stance: `src/ramps/util.ts`'s `centerFootprint` is copied from `obstacle/src/obstacles/util.ts`, not imported — no shared code between sibling projects (see `obstacle/docs/decisions.md`).
 - **Geometry only for v1** — no construction/BOM, no dimension lines yet. `obstacle` built dimension lines alongside its first geometry pass and BOM one phase later; here both are deferred (see [features.md](features.md)) since the immediate goal was getting the ramp shapes right.
 - **Half-pipe is the only ramp type.** A quarter-pipe variant (`src/ramps/quarterPipe.ts`) and a spine variant were both built at different points and then permanently dropped — no longer wanted, unlike the earlier "temporarily out of the UI, staged to rejoin" framing this file used to have for quarter-pipe. `research/design.md`'s "Half-pipe as a special case of quarter-pipe" section still explains the shared curve math/reasoning behind how the half-pipe itself is built (two mirrored transitions), even though quarter-pipe isn't a shippable type anymore.
-- **3D view only**, no 2D top-down view — same reasoning as `obstacle`: no terrain to place a ramp on.
+- **3D view only**, no 2D top-down view — same reasoning as `obstacle`: no terrain to place a ramp on. This doesn't cover the "2D drawings" tab (see status.md): those are per-part shop drawings (one rib, one joist, etc., not the whole assembled ramp), not a site/plan view — a different thing this decision was never about.
 - **Params reset to defaults via the reset button** — no persisted state while the page is open, matching `obstacle`.
 
 ## Ramp geometry

@@ -14,6 +14,8 @@ import {
   type SkinGrainDirection,
 } from "./ramps/halfPipe";
 import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
+import { allPartDrawings } from "./drawings/halfPipePartDrawings";
+import { renderPartDrawing } from "./drawings/renderPartDrawing";
 import { HistoryStack } from "./history";
 
 interface Footprint {
@@ -125,6 +127,7 @@ const AVAILABLE_SPACE_SLIDERS: SliderSpec[] = [
 const availableSpace: Record<string, number> = { length: 6.7, width: 3, height: 2 };
 
 const viewport = document.getElementById("viewport")!;
+const drawingsListEl = document.getElementById("drawings-list")!;
 const spaceSlidersEl = document.getElementById("space-sliders")!;
 const spaceStatusEl = document.getElementById("space-status")!;
 const ribSlidersEl = document.getElementById("rib-sliders")!;
@@ -368,6 +371,19 @@ function rebuildDimensions(params: HalfPipeParams): void {
   };
 }
 
+/** Rebuilds the "2D drawings" tab: one labeled, dimensioned SVG per repeated part (see halfPipePartDrawings.ts) — cheap enough to redo on every param change, tab visible or not. */
+function rebuildPartDrawings(params: HalfPipeParams): void {
+  drawingsListEl.innerHTML = "";
+  for (const part of allPartDrawings(params)) {
+    const card = document.createElement("div");
+    card.className = "drawing-card";
+    const heading = document.createElement("h3");
+    heading.textContent = part.title;
+    card.append(heading, renderPartDrawing(part));
+    drawingsListEl.append(card);
+  }
+}
+
 let currentParams: HalfPipeParams = { ...RAMP.defaults };
 
 interface AppSnapshot {
@@ -531,6 +547,7 @@ function rebuildRamp(): void {
 
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);
+  rebuildPartDrawings(currentParams);
   repositionFigures(currentParams);
   renderSpaceStatus();
 }
@@ -652,16 +669,14 @@ scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
 });
-// Structural framing (bottom transition, curve joists, internal ribs) hides once either skin
-// layer is shown — both sit directly on/over it, so seeing them "through" the skin is just
-// visual clutter, not information the user needs the ribs/joists to still show for.
+// Bottom transition framing and curve joists hide once layer 1 is shown — it sits directly
+// over them, so seeing them "through" the skin is just visual clutter. Internal ribs stay
+// visible regardless of either skin layer, since layer 2 doesn't cover them the same way.
 function updateSkinVisibility(): void {
   const showLayer1 = skinLayer1Toggle.checked;
   const showLayer2 = skinLayer2Toggle.checked;
-  const hideStructure = showLayer1 || showLayer2;
-  bottomTransitionGroup.visible = !hideStructure;
-  curveJoistGroup.visible = !hideStructure;
-  internalRibGroup.visible = !hideStructure;
+  bottomTransitionGroup.visible = !showLayer1;
+  curveJoistGroup.visible = !showLayer1;
   skinGroup.visible = showLayer1;
   skinLayer2Group.visible = showLayer2;
 }
@@ -684,6 +699,18 @@ function positionScaleTooltip(): void {
 }
 scaleTooltipTrigger.addEventListener("mouseenter", positionScaleTooltip);
 scaleTooltipTrigger.addEventListener("focus", positionScaleTooltip);
+
+const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".tab-btn"));
+for (const tabButton of tabButtons) {
+  tabButton.addEventListener("click", () => {
+    for (const btn of tabButtons) {
+      const selected = btn === tabButton;
+      btn.setAttribute("aria-selected", String(selected));
+      document.getElementById(btn.getAttribute("aria-controls")!)!.hidden = !selected;
+    }
+  });
+}
+
 applyDefaults();
 updateHistoryButtons();
 
