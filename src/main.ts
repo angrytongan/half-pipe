@@ -163,7 +163,9 @@ scene.background = new THREE.Color(0xdfe9f0);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 camera.position.copy(DEFAULT_CAMERA_POSITION);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// preserveDrawingBuffer: true — otherwise the browser's print rasterizer (which runs async,
+// not synced to the render loop below) can capture a cleared framebuffer and print a blank canvas.
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
 viewport.appendChild(renderer.domElement);
 

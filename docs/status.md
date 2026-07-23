@@ -653,3 +653,37 @@ space constraint the status pills describe numerically.
 workflow. `vite.config.ts`'s `base` is `/half-pipe/` when `GITHUB_ACTIONS` is set (matching this
 repo's GitHub Pages project-page path) and `/` otherwise, so local `dev`/`preview` stay at the
 root.
+
+## Printing
+
+No print button or PDF export — this is the browser's native print (Cmd/Ctrl+P), styled by
+`index.html`'s `@media print` block. Whichever tab is currently active is what prints; the other
+two tab-panels are already `hidden` by the tab-switching code in `src/main.ts`, and the print
+block unconditionally hides the app header, sliders panel, and tab bar on top of that — so the
+printed page is just that one tab's content, nothing else.
+
+The 2D drawings tab gets the most specific treatment: `#drawings-list` drops from its on-screen
+CSS Grid to plain `display: block` for print — page fragmentation (`break-inside`, `break-after`)
+inside a Grid container is inconsistently supported across browsers (Safari's print engine
+especially), and no amount of tuning row/gap sizing on top of a grid fixed the drift seen here
+(cards progressively sliding down and eventually crossing a page break); plain block flow is the
+best-supported fragmentation context, so the print path drops the grid entirely rather than
+fighting it. Pagination itself is just `break-inside: avoid` (keeps each card's heading and svg
+together) plus `break-after: page` on every card except the last (`:not(:last-child)`, so there's
+no trailing blank page) — both paired with their legacy `page-break-*` equivalents for older print
+engines that key off those instead. Deliberately *not* sized to fill the page: an earlier attempt
+gave the card or svg an explicit `vh` height to make each one fill a full page, but `vh` in print
+is relative to the paper size, not the actual printable area (paper size minus the browser's own
+print margins) — any mismatch there oversizes every card by the same fixed amount, which likely
+also contributed to the drift. Rendering the svg at its natural on-screen width/aspect-ratio
+instead avoids needing to know the printable area's exact height at all.
+`#drawings-list`'s on-screen grid `gap` is zeroed for print purely so each page after the first
+doesn't start with dead leading space — with every card already forced onto its own page, the gap
+has no other effect. Colors are forced to black-on-white regardless of the app's light/dark theme
+(paper has no dark mode). The 3D view tab prints in its
+on-screen colors as-is (sky background, ramp/joist/coping materials) — it's a visual reference, not
+a fabrication drawing, so nothing forces it to line art. The `WebGLRenderer` is constructed with
+`preserveDrawingBuffer: true` for this reason: without it, the browser's print rasterizer (which
+runs async, not synced to the render loop) can capture a cleared framebuffer and print a blank
+canvas instead of the last rendered frame. The bill-of-materials tab has no printing-specific CSS
+yet since it's still just placeholder text.

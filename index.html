@@ -352,13 +352,18 @@
         padding: 0.6rem 0.8rem;
         z-index: 1;
       }
-      /* The drawings tab is the only part of this SPA meant to leave the browser: everything
-         else (header, sliders panel, tab bar) is on-screen chrome with nothing to print, and
-         the tab/viewport layout below is positioned/sized for a screen viewport, not a page
-         flow that a printer can paginate across multiple sheets. Placed last in the stylesheet
-         (after .part-outline/.dim-*/.drawing-card h3's own unconditional rules) so it actually
-         wins the cascade at equal specificity — an earlier position lost to those later,
-         non-media-queried rules even while printing. */
+      /* Only the active tab's content is meant to leave the browser: the header, sliders panel,
+         and tab bar are on-screen chrome with nothing to print (hidden here regardless of which
+         tab is active), and each tab-panel's own layout below is positioned/sized for a screen
+         viewport, not a page flow that a printer can paginate across multiple sheets. The
+         inactive tab-panels are already `hidden` by main.ts's tab switching, so only the visible
+         one ever reaches this stylesheet. Placed last in the stylesheet (after .part-outline,
+         .dim-*, and .drawing-card h3's own unconditional rules) so it actually wins the
+         cascade at equal specificity — an earlier position lost to those later, non-media-queried
+         rules even while printing. CAUTION: this comment must never contain the literal
+         sequence "*" followed immediately by "/" — that closes the comment early and silently
+         voids this entire @media print block (verified: this bug shipped for a while before
+         being caught). */
       @media print {
         .app-header,
         #panel,
@@ -379,20 +384,43 @@
           border: none;
           box-shadow: none;
         }
+        /* three.js sets the canvas's width/height as inline styles sized for the screen
+           viewport — !important is needed to win over those for the printed page. */
+        #viewport canvas {
+          width: 100% !important;
+          height: auto !important;
+        }
+        /* display: block (not grid) — print/page fragmentation (break-inside, break-after)
+           inside a CSS Grid container is inconsistently supported across browsers (Safari's
+           print engine especially), and no amount of tuning row/gap sizing on top of it fixed
+           the drift seen here card after card. Plain block flow is the best-supported
+           fragmentation context, so the print path drops the grid entirely instead of trying
+           to make one work. */
         #drawings-list {
+          display: block;
           position: static;
           overflow: visible;
-          grid-template-columns: 1fr;
           padding: 0;
         }
+        /* Deliberately not sized to fill the page (no vh/height math): a fixed vh height on the
+           card or svg assumes `vh` in print equals the printable area, but that area is the
+           paper size minus the browser's own print margins — a mismatch there oversizes every
+           card by the same fixed amount, and that error compounds page after page, drifting
+           each successive card further down until one crosses a page break. Sizing the svg at
+           its natural on-screen width/aspect-ratio instead sidesteps needing to know the
+           printable area's exact height at all — break-inside/break-after below are the only
+           things doing pagination work. Legacy page-break-* properties alongside the modern
+           break-* ones since older print-engine code paths (still exercised by some browsers'
+           print preview) key off those instead. */
         .drawing-card {
           break-inside: avoid;
+          page-break-inside: avoid;
+        }
+        .drawing-card:not(:last-child) {
           break-after: page;
+          page-break-after: always;
         }
         .drawing-card svg {
-          width: 100%;
-          aspect-ratio: auto;
-          height: 90vh;
           border: none;
           background: #fff;
         }
