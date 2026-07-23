@@ -280,7 +280,7 @@ coping slider group's DOM is rebuilt (`renderAllSliderGroups`, e.g. on "Reset to
 
 A "Skin" section (after Coping) has two sliders, `skinLayer1ThicknessMm` (closest to the
 ground) and `skinLayer2ThicknessMm` (sits on top of the first), both 3–25mm range, default
-12mm each; four more for sheet size — `skinSheetLength`/`skinSheetWidth` for layer 1 and
+9mm each; four more for sheet size — `skinSheetLength`/`skinSheetWidth` for layer 1 and
 `skinLayer2SheetLength`/`skinLayer2SheetWidth` for layer 2, independent of each other (1–3.6m /
 0.6–1.5m, default 2.4m/1.2m each — a standard "8×4" sheet); and a `skinGrainDirection` select
 (`"length-ways"` default / `"width-ways"`, `SkinGrainDirection` in `halfPipe.ts`) for which way
@@ -334,13 +334,18 @@ the curve rows' own `flatExtension` doesn't already reach — nothing bends ther
 grain constraint on orientation, unlike the curve sheets. Both orientations (long edge along X,
 long edge along Z) are tiled and compared, and whichever needs fewer total sheets wins (ties
 keep long-edge-X) — forcing one direction can mean more cuts/wasted offcuts than the ramp's own
-proportions actually call for. Centered at X=0 (`tileCenteredClipped`, skin.ts), tiled outward,
-clipped to `±(half - flatExtension)` (both curve rows share the same `flatExtension`, by
-left/right symmetry) so they butt flush against the curve rows' own reach — no gap, no overlap.
-Empty if that reach alone already covers to the ramp's centerline (`tileCenteredClipped` returns
-`[]` for a non-positive span). Also clipped at the ramp's edges (±width/2). Layer 2's own flat
-sheets use its own sheet size and its own `flatExtension`, but aren't staggered against layer
-1's flat sheets — see features.md.
+proportions actually call for; `chooseFlatSheetLayout` (skin.ts) is this comparison, factored out
+of both `buildHalfPipeSkinLayer1`/`buildHalfPipeSkinLayer2` (which otherwise each inlined the
+identical logic) since the 2D drawings tab and bill of materials need it too — this coverage
+region's own leftover piece is a real, non-standard-size sheet (see `halfPipeSkinLayer1FlatSheetSizes`/
+`halfPipeSkinLayer2FlatSheetSizes`, `halfPipe.ts`), not a scrap piece safely ignorable, and both
+of those consumers used to silently assume every sheet was the standard size. Centered at X=0
+(`tileCenteredClipped`, skin.ts), tiled outward, clipped to `±(half - flatExtension)` (both curve
+rows share the same `flatExtension`, by left/right symmetry) so they butt flush against the curve
+rows' own reach — no gap, no overlap. Empty if that reach alone already covers to the ramp's
+centerline (`tileCenteredClipped` returns `[]` for a non-positive span). Also clipped at the
+ramp's edges (±width/2). Layer 2's own flat sheets use its own sheet size and its own
+`flatExtension`, but aren't staggered against layer 1's flat sheets — see features.md.
 
 **Layer 2's differences from layer 1** (all in `buildHalfPipeSkinLayer2`):
 1. *Staggered seams, arc direction* — `curveSheetRows`' topmost row is half-width
@@ -429,6 +434,152 @@ A "Show dimensions" checkbox (`#dimensions-toggle`, top of `#panel`) toggles
 `dimensionsGroup.visible` directly — no rebuild involved, since the group and its contents
 already exist regardless of visibility.
 
+## 2D drawings
+
+The "2D drawings" tab (see Scene below) shows one labeled, dimensioned SVG per *repeated* part
+— every rib is an identical copy of the others, every curve/deck joist shares the same
+cross-section and (since `ribZPositions` spaces sections evenly) the same length, and so on —
+so drawing every instance would just repeat the same shape. `src/drawings/` holds this, kept
+separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Line`/
+`ArrowHelper`-based) rather than folded into it:
+
+- **`svgDimension.ts`**'s `buildLinearDimension2D` is `dimensionLine.ts`'s CAD-style
+  (extension lines + offset dimension line + outward-pointing arrowheads + label position)
+  convention, redone in plain `[number, number]` tuples instead of `THREE.Vector3` — 2D, and
+  SVG has no cone primitive, so arrowheads are plain triangle polygons instead of
+  `ArrowHelper`. `arrowLength`/`arrowWidth` are explicit parameters rather than fixed constants
+  (unlike `dimensionLine.ts`'s `ARROW_LENGTH`/`ARROW_WIDTH`) since parts here span wildly
+  different scales — a ~2m rib profile and a 45×90mm joist cross-section can't share one fixed
+  arrow size and still look right. `startGap` (extension lines begin that far from the part
+  they measure, rather than touching it) and `labelGap` (how far the label sits past the
+  dimension line) are caller-supplied for the same reason `dimensionLine.ts`'s fixed
+  `LABEL_NUDGE` doesn't work here: a fraction of *that dimension's own* `offsetDistance` shrinks
+  right along with it, so the rib's small detail dimensions (notch wall/shelf, base edge — see
+  `detailOffsetDistance` below) would get a label nudge too thin to clear the same font size
+  used everywhere else in the drawing. `renderPartDrawing.ts` sizes both from the drawing's own
+  fontSize/lineHeight (and, for `labelGap`, that specific label's own text length) instead, so
+  they hold up regardless of how small an individual dimension's offset is. `labelGap` only
+  clears whichever direction its label actually needs — half the line height for a dimension
+  whose offset is vertical (so the line itself is horizontal), half the label's own text width
+  for a horizontal offset (vertical line) — rather than always taking the max of both: over
+  clearing a long label on a horizontal dimension pushed it down further than necessary, eating
+  into the part-note text stack anchored a fixed distance below (see `LABEL_OFFSET_FACTOR`).
+- **`halfPipePartDrawings.ts`** builds each part's outline + dimensions + text labels (all in
+  mm, converted from `HalfPipeParams`' own mix of m/mm fields) as plain data, no rendering:
+  - **Rib** — traces `ribLocalProfilePoints` (extracted from `halfPipe.ts`'s `halfPipeOutline`,
+    which now just mirrors/places two copies of it either side of the bottom transition), so
+    the drawing can't drift from what's actually extruded for every rib in the 3D view —
+    including its two fictitious ground-closing edges (see decisions.md/`halfPipeOutline`),
+    since those are what's actually rendered, not a hypothetically "more correct" outline.
+    Dimensioned: the overall envelope (height, base run along the ground), the flat deck's own
+    top run (outer edge to the notch's wall — same length as `deckBoardLength`, not the raw
+    `deckLength` param, since the notch cuts into it), the small base edge between the ground
+    and the curve's own start (at `joistDepthMm`), and the notch's own wall/shelf cuts.
+    Radius, transition angle, vert height (when present), and the raw `deckLength` param are
+    text labels instead — an angular-dimension variant isn't built anywhere yet (see
+    features.md), so hand-dimensioning the curve itself would be new scope, not reuse. Rib
+    thickness (the extrusion depth, not drawable in a flat profile view) is a text label too.
+  - **Deck board** — a length (`deckBoardLength`, also extracted from `halfPipe.ts`'s
+    `buildHalfPipeDeck`) × width (`width`) rectangle, ribThicknessMm labeled.
+  - **Joist** — length (one bay's own clear span, from `ribZPositions`' first pair — every
+    curve/deck joist shares it) × depth (`joistDepthMm`) rectangle, joistThicknessMm labeled.
+  - **Bottom transition plate** and **stud** — two separate drawings, same joist cross-section
+    but different lengths (`bottomTransitionMemberLengths`, extracted from
+    `buildBottomTransitionFrame`): the plate runs the bottom transition's own length, the stud
+    spans between the plates' inside faces.
+  - **Skin layer 1/2 sheet** — the *flat* sheet-size params (`skinSheetLength`/`skinSheetWidth`,
+    `skinLayer2SheetLength`/`skinLayer2SheetWidth`) as a rectangle, thickness labeled — the
+    stock size before it's bent onto the curve, not any of the tiled/clipped as-installed
+    pieces `skin.ts` actually cuts (see Skin above). Plus one drawing per distinct size actually
+    present in each layer's own flat (bottom-transition) coverage — `skinLayer1/2FlatInfillPartDrawings`,
+    sized by `halfPipeSkinLayer1/2FlatSheetSizes` (`halfPipe.ts`) — since that coverage's own
+    leftover piece is a real, continuously variable size (whatever's left of
+    `bottomTransitionLength` once the curve rows' own `flatExtension` is subtracted), not the
+    standard sheet size; both the 2D drawings tab and the bill of materials used to silently
+    assume every layer's sheets were one uniform size, which was simply wrong. Layer 2's
+    narrower top-of-curve starter row (below) is a separate, *fixed*-fraction case and unaffected
+    by this.
+
+  Every non-rib part is built through one shared `rectanglePartDrawing` helper (a box's own
+  length × height rectangle, third dimension as a text label) rather than six near-identical
+  one-off shapes.
+- **`renderPartDrawing.ts`** turns one `PartDrawing` into a standalone `<svg>`: computes a
+  viewBox from the outline + dimension-line + label extents (with padding for arrowheads/text),
+  picks one arrow length/width/font size per drawing (a fixed fraction of that drawing's own
+  bounding diagonal, so a rib drawing's arrows aren't a joist drawing's arrows), and writes
+  plain markup via `innerHTML` rather than a tree of `createElementNS` calls. Y is negated on
+  every coordinate right before it's written (SVG's Y axis points down; the geometry above is
+  Y-up) instead of an SVG-level flip transform, which would also mirror the text.
+
+`src/main.ts`'s `rebuildPartDrawings` (called from `rebuildRamp`, same as `rebuildDimensions`)
+clears and rebuilds `#drawings-list` from `allPartDrawings(currentParams)` every time — cheap
+DOM/SVG work, so it's rebuilt unconditionally rather than only when that tab is visible.
+
+## Bill of materials
+
+The "Bill of materials" tab shows one row (part name, quantity, dimensions, material) per part
+*type* — the same grouping the 2D drawings tab uses (a rib is one row regardless of its
+edge/internal role, a joist one row regardless of curve/deck role, since every part sharing a row
+is dimensionally identical). `src/construction/halfPipeBom.ts`'s `calculateHalfPipeBom` is a
+plain data function (no DOM, no Three.js-specific types in its return value) mirroring
+`../obstacle`'s `src/construction/` pattern — but unlike `earthenBom.ts` there, which integrates
+a profile curve to derive a fill volume from scratch, every quantity here comes from calling the
+same build functions the 3D view already calls (`buildHalfPipeRibsBySection`,
+`buildHalfPipeJoistsBySection`, `buildBottomTransitionFrame`, `buildHalfPipeDeck`,
+`buildHalfPipeSkinLayer1`/`2`, `halfPipeCopingCenters`) and reading `.length` off their result,
+rather than a re-derived count formula — the joist landmark count especially (see
+`buildHalfPipeJoistsBySection`'s own doc comment) would be easy to get subtly wrong reimplementing
+independently, the same "can't drift from what's built" reasoning the 2D drawings already follow.
+Bottom transition stud count is read as `buildBottomTransitionFrame(params).length - 2` (that
+function always returns `[...plates (2), ...studs]`) rather than `internalStudCount + 2` directly,
+for the same reason.
+
+Rib quantity is `(edgeRibs.length + internalRibs.length) * 2`, not the bare array length: each
+`buildHalfPipeRibsBySection` array entry is one `THREE.BufferGeometry`, but `halfPipeOutline`
+always extrudes *two* mirrored, physically disjoint shapes (left/right transition — they don't
+span the bottom transition gap, see Structure above) into that single object, purely so the 3D
+view has one mesh per Z position instead of two. So each entry is actually two separate physical
+rib pieces, not one — the 2D drawing (`ribPartDrawing`) already draws just the one-sided profile
+these dimensions describe, which is what first exposed the undercount (BOM said 4 ribs at
+defaults; the correct count both matches `ribZPositions`' 4 Z-positions × 2 sides and is what
+`ribPartDrawing` implies by drawing a single side at all).
+
+Joist length is a real computed number (`ribZPositions`' first bay's own inside-face gap, same
+value `joistPartDrawing` uses), not a "varies by bay" hedge an earlier version of this file
+shipped with — every curve/deck joist actually shares one length, since `ribZPositions` spaces
+every section evenly (see `joistPartDrawing`'s own doc comment); there was no reason to hedge.
+
+Two cut variants get their own row(s), broken out of the standard "Skin layer N sheet" row's
+quantity (which would otherwise silently mix sizes together, as it used to): layer 2's narrower
+top-of-curve starter (`Skin layer 2 sheet — top-of-curve starter (half width)`, quantity from
+`halfPipeSkinLayer2NarrowStarterCount` — a fixed half-width fraction of the standard sheet, so a
+count alone is enough, no separate computed size needed) and each layer's own bottom-transition
+flat infill (`Skin layer 1/2 sheet — bottom transition (flat)`, quantity/size from
+`halfPipeSkinLayer1/2FlatSheetSizes`), whose size is a continuously variable leftover instead —
+whatever's left of `bottomTransitionLength` once the curve rows' own `flatExtension` is
+subtracted, not a fixed fraction of anything. An earlier version of this file lumped both into
+the standard row's count, silently claiming every layer 1 sheet was one uniform size when it
+wasn't (5 sheets shown, all as if 2400×1200mm, when one was actually a 2400×1098mm leftover) —
+and similarly for layer 2's narrow starter. The standard row's own quantity is
+`builtLength - flatInfillCount (- narrowStarterCount for layer 2)`, not the bare built array
+length, for the same reason. The 2D drawings tab already had its own dimensioned drawing for the
+narrow starter (`skinLayer2NarrowCurveSheetPartDrawing`) before this — only the BOM was missing
+it. Material labels reflect the actual stock each part is cut from, not just "wood": ribs and
+deck boards share the rib stock
+(`ribThicknessMm`) and are plywood (a curved rib profile can't be cut from dimensional lumber);
+joists and the bottom transition's plates/studs share the joist stock
+(`joistThicknessMm`/`joistDepthMm`) and are dimensional lumber; skin sheets are Plywood/OSB;
+coping is labeled Steel pipe.
+
+`src/main.ts`'s `rebuildBom` (called from `rebuildRamp`, same as `rebuildPartDrawings`) clears and
+rebuilds `#bom-container` from `calculateHalfPipeBom(currentParams)` every time — same
+rebuilt-unconditionally reasoning as the 2D drawings tab. A disclaimer ("Planning estimate
+only...") sits below the table, reusing `obstacle`'s own BOM disclaimer text (its `.bom-status`
+safe/unsafe badge pattern doesn't apply here — there's no single pass/fail check this BOM makes,
+unlike the roller's slope check). Out of scope for now (see features.md): soundness checks (rib
+spacing vs. plywood span rating), fastener counts, cost estimates, and stock-length cutting
+optimization.
+
 ## Scene
 
 `src/main.ts`: `PerspectiveCamera` + stock `OrbitControls` (no damping,
@@ -471,12 +622,12 @@ Two checkboxes, "Show layer 1" (`#skin-layer1-toggle`) and "Show layer 2"
 (`#skin-layer2-toggle`), both under "Show scale" and unchecked by default, replace the old
 single "Show skin" toggle — each hooked up to exactly its own layer (`skinGroup`/
 `skinLayer2Group`), so either can be shown independently to compare them. `updateSkinVisibility`
-(shared by both toggles' `input` listeners) also hides `bottomTransitionGroup`,
-`curveJoistGroup`, and `internalRibGroup` (structure either layer would cover or bury) whenever
-*either* layer is checked — same direct-`.visible` pattern as the dimensions/scale toggles
-above, so the hidden/shown state survives param changes without re-wiring. `deckJoistGroup` and
-`edgeRibGroup` aren't touched either way — the deck/ground joists and the two mandatory edge
-ribs stay visible regardless (they still show through/around a skin, not buried by it).
+(shared by both toggles' `input` listeners) hides `bottomTransitionGroup` and `curveJoistGroup`
+(structure layer 1 would cover) whenever "Show layer 1" is checked — same direct-`.visible`
+pattern as the dimensions/scale toggles above, so the hidden/shown state survives param changes
+without re-wiring. `internalRibGroup`, `deckJoistGroup`, and `edgeRibGroup` aren't touched by
+either toggle — the internal ribs, deck/ground joists, and the two mandatory edge ribs stay
+visible regardless (structure the user still needs to see even with a skin layer shown).
 
 **Coping tubes**: a hollow tube (`THREE.ExtrudeGeometry` of an annulus shape — outer radius
 `copingOdMm/2`, inner radius `copingIdMm/2`, built once per rebuild and shared by both meshes)
@@ -493,15 +644,26 @@ reset-view button and "Show dimensions" toggle, at the top, then an accordion of
 independently-collapsible sections — Available space, Ramp parameters,
 Ribs, Joists, Bottom transition, Coping, Skin, each a plain native
 `<details>`/`<summary>` so no JS is needed, all closed by default on page load (no `open`
-attribute on any of them) — then the reset-to-defaults button) and `#viewport` (3D view) cards.
+attribute on any of them) — then the reset-to-defaults button) and a `.main-tabs` card.
+
+`.main-tabs` holds a `.tab-bar` (three plain `<button role="tab">`s — "3D view", "2D drawings",
+"Bill of materials" — native buttons, no roving-tabindex ARIA tablist keyboard pattern, since
+click/Enter/Space/focus already come free) above three `.tab-panel`s, only one visible
+(`hidden` attribute) at a time. `main.ts` wires each button's click to set `aria-selected` and
+toggle its own panel's `hidden` via `aria-controls`. `#viewport` (the 3D view, unchanged from
+before tabs existed) is the first/default panel; `#tab-drawings` holds `#drawings-list` (see
+2D drawings above); `#tab-bom` is still a `.placeholder-text` ("coming soon") — bill of
+materials isn't built yet, see features.md. `.main-tabs` itself carries the `.card`
+look/`overflow: hidden` (so canvas/SVG corners still clip to the rounded card regardless of
+which tab is active) that used to sit directly on `#viewport`.
+
 The Skin section itself groups its sliders under two `.subsection-label` headings, "Layer 1" and
 "Layer 2", each labeling its own `renderSliderList` container (`skin-layer1-sliders`/
-`skin-layer2-sliders`) — plain, static text, not collapsible on their own. Both share a `.card`
-class
-(border/radius/shadow/opaque background — `var(--card-bg)`); `#viewport`
-additionally hosts a small `.overlay-card` (the space-status pills,
+`skin-layer2-sliders`) — plain, static text, not collapsible on their own. `#panel` and
+`.main-tabs` share a `.card` class (border/radius/shadow/opaque background — `var(--card-bg)`);
+`#viewport` additionally hosts a small `.overlay-card` (the space-status pills,
 top-left), positioned absolutely inside it (`position: relative` on
-`#viewport`) so it stays in view over the 3D scene regardless of panel
+`.tab-panel`) so it stays in view over the 3D scene regardless of panel
 state. `.overlay-card` carries `class="card overlay-card"` and adds no
 background of its own — it inherits `.card`'s, so it's always exactly the
 same color as `#panel`, opaque enough to stay legible over whatever's
@@ -551,6 +713,35 @@ so "Reset to defaults" itself can be undone; the initial page-load render uses a
 `#redo-btn` pair sits at the very top of `#panel`, disabled via `HistoryStack`'s
 `canUndo`/`canRedo` whenever their respective stack is empty.
 
+## Persistence
+
+Every control's value persists to `localStorage` (key `half-pipe-controls`) across page loads —
+`currentParams`, `availableSpace`, and the four display toggles (dimensions/scale/skin layer 1/2
+visibility; the grain-direction select is part of `currentParams` already). Deliberately *not*
+persisted: undo/redo history itself (a fresh page load always starts with an empty undo stack,
+same as before), and camera/orbit-controls view state (position/target reset to
+`DEFAULT_CAMERA_POSITION`/`DEFAULT_CAMERA_TARGET` on every load, same as "Reset view").
+
+`persistControls()` (`src/main.ts`) writes one JSON blob covering all three groups. It's called
+from the end of `renderSpaceStatus` — which is itself called both directly (available-space
+sliders' own `onChange`) and from the end of every `rebuildRamp` (every other slider, plus
+undo/redo/reset, all of which end by calling `rebuildRamp`) — so that single call site covers
+every slider and every way a slider's value can change, without a second hook. The four toggles
+don't route through either of those (they just flip a `THREE.Group`'s `visible` directly), so
+each toggle's own `input` listener calls `persistControls()` itself.
+
+`loadPersistedControls()` reads that blob back at load time (before the first render), merged
+field-by-field over `HALF_PIPE_DEFAULTS`/today's `availableSpace`/each toggle's current `checked`
+state — not trusted outright — so a future slider being added or removed, or corrupted/foreign
+JSON in that key (wrapped in try/catch), falls back to that one field's default instead of
+crashing or leaving a slider's state `undefined`. Returns `null` if nothing's saved yet, in which
+case page load falls back to the original `applyDefaults()` path unchanged.
+`applyPersistedControls` is `applyDefaults`'s page-load counterpart: same slider-render/rebuild
+calls, but also sets each toggle's `checked` state and re-applies its own visibility effect
+(`dimensionsGroup.visible`, the scale figures, `updateSkinVisibility()`) — those effects normally
+only run from each toggle's own `input` listener, which a page load never fires — and skips
+recording an undo entry, since this is the starting state, not a change from one.
+
 ## Available space
 
 Split across two places in `index.html` so the warning can't be hidden by
@@ -585,3 +776,37 @@ space constraint the status pills describe numerically.
 workflow. `vite.config.ts`'s `base` is `/half-pipe/` when `GITHUB_ACTIONS` is set (matching this
 repo's GitHub Pages project-page path) and `/` otherwise, so local `dev`/`preview` stay at the
 root.
+
+## Printing
+
+No print button or PDF export — this is the browser's native print (Cmd/Ctrl+P), styled by
+`index.html`'s `@media print` block. Whichever tab is currently active is what prints; the other
+two tab-panels are already `hidden` by the tab-switching code in `src/main.ts`, and the print
+block unconditionally hides the app header, sliders panel, and tab bar on top of that — so the
+printed page is just that one tab's content, nothing else.
+
+The 2D drawings tab gets the most specific treatment: `#drawings-list` drops from its on-screen
+CSS Grid to plain `display: block` for print — page fragmentation (`break-inside`, `break-after`)
+inside a Grid container is inconsistently supported across browsers (Safari's print engine
+especially), and no amount of tuning row/gap sizing on top of a grid fixed the drift seen here
+(cards progressively sliding down and eventually crossing a page break); plain block flow is the
+best-supported fragmentation context, so the print path drops the grid entirely rather than
+fighting it. Pagination itself is just `break-inside: avoid` (keeps each card's heading and svg
+together) plus `break-after: page` on every card except the last (`:not(:last-child)`, so there's
+no trailing blank page) — both paired with their legacy `page-break-*` equivalents for older print
+engines that key off those instead. Deliberately *not* sized to fill the page: an earlier attempt
+gave the card or svg an explicit `vh` height to make each one fill a full page, but `vh` in print
+is relative to the paper size, not the actual printable area (paper size minus the browser's own
+print margins) — any mismatch there oversizes every card by the same fixed amount, which likely
+also contributed to the drift. Rendering the svg at its natural on-screen width/aspect-ratio
+instead avoids needing to know the printable area's exact height at all.
+`#drawings-list`'s on-screen grid `gap` is zeroed for print purely so each page after the first
+doesn't start with dead leading space — with every card already forced onto its own page, the gap
+has no other effect. Colors are forced to black-on-white regardless of the app's light/dark theme
+(paper has no dark mode). The 3D view tab prints in its
+on-screen colors as-is (sky background, ramp/joist/coping materials) — it's a visual reference, not
+a fabrication drawing, so nothing forces it to line art. The `WebGLRenderer` is constructed with
+`preserveDrawingBuffer: true` for this reason: without it, the browser's print rasterizer (which
+runs async, not synced to the render loop) can capture a cleared framebuffer and print a blank
+canvas instead of the last rendered frame. The bill-of-materials tab has no printing-specific CSS
+yet since it's still just placeholder text.

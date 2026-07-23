@@ -13,6 +13,9 @@ import {
   curveInteriorJoistLocalPoints,
   halfPipeCopingCenters,
   halfPipeFootprint,
+  halfPipeSkinLayer1FlatSheetSizes,
+  halfPipeSkinLayer2FlatSheetSizes,
+  halfPipeSkinLayer2NarrowStarterCount,
   HALF_PIPE_DEFAULTS,
   type HalfPipeParams,
 } from "./halfPipe";
@@ -898,6 +901,44 @@ describe("buildHalfPipeSkinLayer1", () => {
   });
 });
 
+describe("halfPipeSkinLayer1FlatSheetSizes", () => {
+  it("matches the actual flat (BoxGeometry) sheets buildHalfPipeSkinLayer1 builds — count and each one's own X/Z span", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sizes = halfPipeSkinLayer1FlatSheetSizes(params);
+    const totalCount = sizes.reduce((sum, s) => sum + s.count, 0);
+
+    const flatSheets = buildHalfPipeSkinLayer1(params).filter((g) => g.type === "BoxGeometry");
+    expect(totalCount).toBe(flatSheets.length);
+
+    for (const geometry of flatSheets) {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      const a = Math.round((box.max.x - box.min.x) * 1000);
+      const b = Math.round((box.max.z - box.min.z) * 1000);
+      const lengthMm = Math.max(a, b);
+      const widthMm = Math.min(a, b);
+      expect(sizes.some((s) => s.lengthMm === lengthMm && s.widthMm === widthMm)).toBe(true);
+    }
+  });
+
+  it("is genuinely narrower than the standard skinSheetLength x skinSheetWidth stock size at defaults — the leftover after the curve rows, not a full sheet", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sizes = halfPipeSkinLayer1FlatSheetSizes(params);
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const { lengthMm, widthMm } of sizes) {
+      const isStandardSize = lengthMm === Math.round(params.skinSheetLength * 1000) && widthMm === Math.round(params.skinSheetWidth * 1000);
+      expect(isStandardSize).toBe(false);
+    }
+  });
+
+  it("is empty when the curve rows already reach the ramp's own centerline (no flat coverage needed)", () => {
+    // A long bottom transition relative to a small radius/sweep leaves plenty of flat region —
+    // shrinking it to (near) zero removes that region entirely (see chooseFlatSheetLayout).
+    const params: HalfPipeParams = { ...HALF_PIPE_DEFAULTS, bottomTransitionLength: 0.001 };
+    expect(halfPipeSkinLayer1FlatSheetSizes(params)).toEqual([]);
+  });
+});
+
 describe("buildHalfPipeSkinLayer2", () => {
   const notchOf = (params: HalfPipeParams) => {
     const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
@@ -1035,6 +1076,54 @@ describe("buildHalfPipeSkinLayer2", () => {
     const layer2ZColumns = staggeredZColumns(params.width / 2, params.skinSheetLength, params.skinLayer2SheetLength);
     const lastSpan = layer2ZColumns[layer2ZColumns.length - 1][1] - layer2ZColumns[layer2ZColumns.length - 1][0];
     expect(lastSpan).toBeCloseTo(params.skinLayer2SheetLength / 2, 10); // the staggered starter piece, not a full sheet
+  });
+});
+
+describe("halfPipeSkinLayer2FlatSheetSizes", () => {
+  it("matches the actual flat (BoxGeometry) sheets buildHalfPipeSkinLayer2 builds — count and each one's own X/Z span", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sizes = halfPipeSkinLayer2FlatSheetSizes(params);
+    const totalCount = sizes.reduce((sum, s) => sum + s.count, 0);
+
+    const flatSheets = buildHalfPipeSkinLayer2(params).filter((g) => g.type === "BoxGeometry");
+    expect(totalCount).toBe(flatSheets.length);
+
+    for (const geometry of flatSheets) {
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      const a = Math.round((box.max.x - box.min.x) * 1000);
+      const b = Math.round((box.max.z - box.min.z) * 1000);
+      const lengthMm = Math.max(a, b);
+      const widthMm = Math.min(a, b);
+      expect(sizes.some((s) => s.lengthMm === lengthMm && s.widthMm === widthMm)).toBe(true);
+    }
+  });
+
+  it("is genuinely narrower than the standard skinLayer2SheetLength x skinLayer2SheetWidth stock size at defaults", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const sizes = halfPipeSkinLayer2FlatSheetSizes(params);
+    expect(sizes.length).toBeGreaterThan(0);
+    for (const { lengthMm, widthMm } of sizes) {
+      const isStandardSize = lengthMm === Math.round(params.skinLayer2SheetLength * 1000) && widthMm === Math.round(params.skinLayer2SheetWidth * 1000);
+      expect(isStandardSize).toBe(false);
+    }
+  });
+});
+
+describe("halfPipeSkinLayer2NarrowStarterCount", () => {
+  it("accounts for every built sheet alongside the flat and standard counts (narrow + flat + standard = total built)", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const narrowCount = halfPipeSkinLayer2NarrowStarterCount(params);
+    const flatCount = halfPipeSkinLayer2FlatSheetSizes(params).reduce((sum, s) => sum + s.count, 0);
+    const built = buildHalfPipeSkinLayer2(params).length;
+    expect(narrowCount).toBeGreaterThan(0);
+    expect(narrowCount + flatCount).toBeLessThan(built); // some standard-size sheets remain too
+  });
+
+  it("is exactly one Z column's worth on each side (row 0 of curveSheetRows, replaying its own Z-column tiling)", () => {
+    const params = HALF_PIPE_DEFAULTS;
+    const layer2ZColumns = staggeredZColumns(params.width / 2, params.skinSheetLength, params.skinLayer2SheetLength);
+    expect(halfPipeSkinLayer2NarrowStarterCount(params)).toBe(layer2ZColumns.length * 2);
   });
 });
 
@@ -1180,8 +1269,8 @@ describe("halfPipeFootprint", () => {
 
 describe("HALF_PIPE_DEFAULTS skin", () => {
   it("defaults both skin layers to 12mm", () => {
-    expect(HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm).toBe(12);
-    expect(HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm).toBe(12);
+    expect(HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm).toBe(9);
+    expect(HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm).toBe(9);
   });
 
   it("defaults the sheet size to 2.4m x 1.2m, length-ways", () => {

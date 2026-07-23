@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { buildSkinCurveSheet, copingTouchExtension, curveSheetRows, staggeredZColumns, tileFromEdgeClipped, tileFromOppositeEdgeClipped } from "./skin";
+import { buildSkinCurveSheet, chooseFlatSheetLayout, copingTouchExtension, curveSheetRows, staggeredZColumns, tileCenteredClipped, tileFromEdgeClipped, tileFromOppositeEdgeClipped } from "./skin";
 
 /** Every vertex's distance from the transition's own arc center, local (0, radius) — ignoring Z, since the shape is just extruded straight along it. */
 function vertexDistancesFromCenter(geometry: THREE.BufferGeometry, radius: number): number[] {
@@ -265,5 +265,21 @@ describe("staggeredZColumns", () => {
     for (const seam of layer1Seams) {
       expect(columnSeams.some((s) => Math.abs(s - seam) < 1e-6)).toBe(false);
     }
+  });
+});
+
+describe("chooseFlatSheetLayout", () => {
+  it("picks the orientation with fewer total sheets, not a fixed long-edge direction", () => {
+    // reducedHalf=2.4 with a 2.4-long sheet needs only 1 X-segment when the sheet's long edge
+    // runs along X; the same reducedHalf needs multiple 1.2-wide X-segments the other way, so
+    // long-edge-along-X should win here.
+    const layout = chooseFlatSheetLayout(2.4, 3, 2.4, 1.2);
+    expect(layout.xSegments).toEqual(tileCenteredClipped(2.4, 2.4));
+    expect(layout.zRows).toEqual(tileFromEdgeClipped(3, 1.2));
+  });
+
+  it("returns no segments at all once the region has no width left to cover", () => {
+    const layout = chooseFlatSheetLayout(0, 3, 2.4, 1.2);
+    expect(layout.xSegments).toEqual([]);
   });
 });

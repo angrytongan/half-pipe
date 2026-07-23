@@ -14,7 +14,12 @@ import {
   type SkinGrainDirection,
 } from "./ramps/halfPipe";
 import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
+import { allPartDrawings } from "./drawings/halfPipePartDrawings";
+import { renderPartDrawing } from "./drawings/renderPartDrawing";
+import { calculateHalfPipeBom } from "./construction/halfPipeBom";
 import { HistoryStack } from "./history";
+
+const BOM_DISCLAIMER = "Planning estimate only — not a substitute for a qualified builder's or engineer's assessment.";
 
 interface Footprint {
   length: number;
@@ -125,6 +130,8 @@ const AVAILABLE_SPACE_SLIDERS: SliderSpec[] = [
 const availableSpace: Record<string, number> = { length: 6.7, width: 3, height: 2 };
 
 const viewport = document.getElementById("viewport")!;
+const drawingsListEl = document.getElementById("drawings-list")!;
+const bomContainerEl = document.getElementById("bom-container")!;
 const spaceSlidersEl = document.getElementById("space-sliders")!;
 const spaceStatusEl = document.getElementById("space-status")!;
 const ribSlidersEl = document.getElementById("rib-sliders")!;
@@ -160,7 +167,9 @@ scene.background = new THREE.Color(0xdfe9f0);
 const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
 camera.position.copy(DEFAULT_CAMERA_POSITION);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// preserveDrawingBuffer: true — otherwise the browser's print rasterizer (which runs async,
+// not synced to the render loop below) can capture a cleared framebuffer and print a blank canvas.
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
 renderer.shadowMap.enabled = true;
 viewport.appendChild(renderer.domElement);
 
@@ -368,6 +377,33 @@ function rebuildDimensions(params: HalfPipeParams): void {
   };
 }
 
+/** Rebuilds the "2D drawings" tab: one labeled, dimensioned SVG per repeated part (see halfPipePartDrawings.ts) — cheap enough to redo on every param change, tab visible or not. */
+function rebuildPartDrawings(params: HalfPipeParams): void {
+  drawingsListEl.innerHTML = "";
+  for (const part of allPartDrawings(params)) {
+    const card = document.createElement("div");
+    card.className = "drawing-card";
+    const heading = document.createElement("h3");
+    heading.textContent = part.title;
+    card.append(heading, renderPartDrawing(part));
+    drawingsListEl.append(card);
+  }
+}
+
+/** Rebuilds the "Bill of materials" tab: one row per part type (see construction/halfPipeBom.ts) — cheap enough to redo on every param change, tab visible or not, same as rebuildPartDrawings. */
+function rebuildBom(params: HalfPipeParams): void {
+  const rows = calculateHalfPipeBom(params)
+    .map((line) => `<tr><td>${line.part}</td><td class="bom-qty">${line.quantity}</td><td>${line.dimensions}</td><td>${line.material}</td></tr>`)
+    .join("");
+  bomContainerEl.innerHTML = `
+    <table id="bom-table">
+      <thead><tr><th>Part</th><th>Qty</th><th>Dimensions</th><th>Material</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="bom-disclaimer">${BOM_DISCLAIMER}</p>
+  `;
+}
+
 let currentParams: HalfPipeParams = { ...RAMP.defaults };
 
 interface AppSnapshot {
@@ -382,6 +418,60 @@ let pendingSnapshot: AppSnapshot | null = null;
 
 function snapshot(): AppSnapshot {
   return { params: { ...currentParams }, space: { ...availableSpace } };
+}
+
+const CONTROLS_STORAGE_KEY = "half-pipe-controls";
+
+interface PersistedToggles {
+  dimensions: boolean;
+  scale: boolean;
+  skinLayer1: boolean;
+  skinLayer2: boolean;
+}
+
+interface PersistedControls extends AppSnapshot {
+  toggles: PersistedToggles;
+}
+
+/** Saves every current control value — sliders (via currentParams/availableSpace) and the display
+ * toggles/grain-direction select (read straight off the DOM, since those don't have their own JS
+ * state variable) — as one JSON blob. Not undo/redo history, and not camera/orbit-controls view
+ * state — just the controls a page reload should put back exactly where they were. */
+function persistControls(): void {
+  const state: PersistedControls = {
+    ...snapshot(),
+    toggles: {
+      dimensions: dimensionsToggle.checked,
+      scale: scaleToggle.checked,
+      skinLayer1: skinLayer1Toggle.checked,
+      skinLayer2: skinLayer2Toggle.checked,
+    },
+  };
+  localStorage.setItem(CONTROLS_STORAGE_KEY, JSON.stringify(state));
+}
+
+/** Reads persisted controls back, merged field-by-field over today's defaults/current toggle
+ * state rather than trusted outright — a future slider addition/removal, or corrupted/foreign
+ * JSON (try/catch), then just falls back to that field's default instead of crashing or leaving
+ * it undefined. Returns null (caller falls back to applyDefaults) if nothing's saved yet. */
+function loadPersistedControls(): PersistedControls | null {
+  const raw = localStorage.getItem(CONTROLS_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      params: { ...HALF_PIPE_DEFAULTS, ...parsed.params },
+      space: { ...availableSpace, ...parsed.space },
+      toggles: {
+        dimensions: parsed.toggles?.dimensions ?? dimensionsToggle.checked,
+        scale: parsed.toggles?.scale ?? scaleToggle.checked,
+        skinLayer1: parsed.toggles?.skinLayer1 ?? skinLayer1Toggle.checked,
+        skinLayer2: parsed.toggles?.skinLayer2 ?? skinLayer2Toggle.checked,
+      },
+    };
+  } catch {
+    return null;
+  }
 }
 
 function updateHistoryButtons(): void {
@@ -432,6 +522,9 @@ function renderSpaceStatus(): void {
     const detail = fits ? `${req.toFixed(2)}m / ${avail.toFixed(2)}m` : `${req.toFixed(2)}m / ${avail.toFixed(2)}m — over by ${(req - avail).toFixed(2)}m`;
     return `<div class="space-status ${fits ? "safe" : "unsafe"}">${label}: ${detail}</div>`;
   }).join("");
+  // Called both directly (available-space sliders) and from the end of rebuildRamp (every other
+  // slider, plus undo/redo/reset) — one hook here persists both without a second call site.
+  persistControls();
 }
 
 function rebuildRamp(): void {
@@ -531,6 +624,8 @@ function rebuildRamp(): void {
 
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);
+  rebuildPartDrawings(currentParams);
+  rebuildBom(currentParams);
   repositionFigures(currentParams);
   renderSpaceStatus();
 }
@@ -609,6 +704,27 @@ function applyDefaults(): void {
   rebuildRamp();
 }
 
+/** Page-load counterpart to applyDefaults — same slider/rebuild wiring, but also puts the display
+ * toggles back where they were (their own visibility effects aren't wired to run on page load
+ * otherwise, only on each toggle's own "input" listener) and skips recording an undo entry,
+ * since this is the starting state, not a change from one. */
+function applyPersistedControls(loaded: PersistedControls): void {
+  currentParams = loaded.params;
+  Object.assign(availableSpace, loaded.space);
+  dimensionsToggle.checked = loaded.toggles.dimensions;
+  scaleToggle.checked = loaded.toggles.scale;
+  skinLayer1Toggle.checked = loaded.toggles.skinLayer1;
+  skinLayer2Toggle.checked = loaded.toggles.skinLayer2;
+
+  renderAllSliderGroups();
+  rebuildRamp();
+
+  dimensionsGroup.visible = dimensionsToggle.checked;
+  adultFigure.visible = scaleToggle.checked;
+  childFigure.visible = scaleToggle.checked;
+  updateSkinVisibility();
+}
+
 function resetParams(): void {
   history.record(snapshot());
   applyDefaults();
@@ -647,23 +763,24 @@ undoBtn.addEventListener("click", undo);
 redoBtn.addEventListener("click", redo);
 dimensionsToggle.addEventListener("input", () => {
   dimensionsGroup.visible = dimensionsToggle.checked;
+  persistControls();
 });
 scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
+  persistControls();
 });
-// Structural framing (bottom transition, curve joists, internal ribs) hides once either skin
-// layer is shown — both sit directly on/over it, so seeing them "through" the skin is just
-// visual clutter, not information the user needs the ribs/joists to still show for.
+// Bottom transition framing and curve joists hide once layer 1 is shown — it sits directly
+// over them, so seeing them "through" the skin is just visual clutter. Internal ribs stay
+// visible regardless of either skin layer, since layer 2 doesn't cover them the same way.
 function updateSkinVisibility(): void {
   const showLayer1 = skinLayer1Toggle.checked;
   const showLayer2 = skinLayer2Toggle.checked;
-  const hideStructure = showLayer1 || showLayer2;
-  bottomTransitionGroup.visible = !hideStructure;
-  curveJoistGroup.visible = !hideStructure;
-  internalRibGroup.visible = !hideStructure;
+  bottomTransitionGroup.visible = !showLayer1;
+  curveJoistGroup.visible = !showLayer1;
   skinGroup.visible = showLayer1;
   skinLayer2Group.visible = showLayer2;
+  persistControls();
 }
 skinLayer1Toggle.addEventListener("input", updateSkinVisibility);
 skinLayer2Toggle.addEventListener("input", updateSkinVisibility);
@@ -684,7 +801,21 @@ function positionScaleTooltip(): void {
 }
 scaleTooltipTrigger.addEventListener("mouseenter", positionScaleTooltip);
 scaleTooltipTrigger.addEventListener("focus", positionScaleTooltip);
-applyDefaults();
+
+const tabButtons = Array.from(document.querySelectorAll<HTMLButtonElement>(".tab-btn"));
+for (const tabButton of tabButtons) {
+  tabButton.addEventListener("click", () => {
+    for (const btn of tabButtons) {
+      const selected = btn === tabButton;
+      btn.setAttribute("aria-selected", String(selected));
+      document.getElementById(btn.getAttribute("aria-controls")!)!.hidden = !selected;
+    }
+  });
+}
+
+const persistedControls = loadPersistedControls();
+if (persistedControls) applyPersistedControls(persistedControls);
+else applyDefaults();
 updateHistoryButtons();
 
 function resize(): void {

@@ -4,7 +4,7 @@ import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
 import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
-import { buildSkinCurveSheet, buildSkinFlatSheet, curveSheetRows, staggeredZColumns, tileCenteredClipped, tileFromEdgeClipped } from "./skin";
+import { buildSkinCurveSheet, buildSkinFlatSheet, chooseFlatSheetLayout, curveSheetRows, staggeredZColumns, tileFromEdgeClipped, type FlatSheetLayout } from "./skin";
 
 /**
  * Which way a plywood sheet is laid relative to the ribs it skins: "length-ways" runs the
@@ -59,8 +59,8 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   copingOdMm: 60.3,
   copingHorizontalProtrusionMm: 3.2,
   copingVerticalProtrusionMm: 6.4,
-  skinLayer1ThicknessMm: 12,
-  skinLayer2ThicknessMm: 12,
+  skinLayer1ThicknessMm: 9,
+  skinLayer2ThicknessMm: 9,
   skinSheetLength: 2.4,
   skinSheetWidth: 1.2,
   skinLayer2SheetLength: 2.4,
@@ -69,25 +69,24 @@ export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
 };
 
 /**
- * Two mirrored open profiles (left, right) — the curve/vert/deck portion of a rib — shared by
- * the solid wedge and each individual rib. Each sits on top of the bottom transition's own
- * framing (shifted up by the joist's major dimension, joistDepthMm — that's the height the
- * bottom transition is built to), and each ends at its own base: a rib stops at the *inside*
- * face of the bottommost curve joist (see buildHalfPipeJoists), not at that joist's centerline
- * (the curve's own tangent point) — otherwise the inner half of that joist's thickness would
- * have no rib sitting on it. It still doesn't bridge across to the other side — that gap is
- * buildBottomTransitionSlab's job, not the ribs'. The deck-side closing edge still drops to
- * true y=0 (see decisions.md: it's a rendering convenience, not a structural wall, so it's
- * unaffected by the framing above it). The deck/curve corner itself is cut back into the
- * coping notch (see coping.ts) instead of meeting at a sharp point.
+ * Local (unmirrored, "right side" convention: x >= 0), closed point sequence for the curve/
+ * vert/deck portion of a rib, base at the bottommost curve joist's own *inside* face (see
+ * buildHalfPipeJoists) — not that joist's centerline (the curve's own tangent point), otherwise
+ * the inner half of that joist's thickness would have no rib sitting on it — shifted up by the
+ * joist's major dimension (joistDepthMm — that's the height the bottom transition is built to).
+ * The deck/curve corner is cut back into the coping notch (see coping.ts) instead of meeting at
+ * a sharp point. The first/last two points (ground level, at the outer and base ends) are a
+ * closing convenience, not real edges of the physical rib (see decisions.md) — needed so
+ * `halfPipeOutline` gets a closed, extrudable shape; kept here rather than trimmed so the 2D rib
+ * drawing (see drawings/halfPipePartDrawings.ts) traces exactly what's actually rendered for
+ * every rib in the 3D view, not a hypothetical "more correct" outline.
  */
-function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
+export function ribLocalProfilePoints(params: HalfPipeParams): [number, number][] {
   const {
     radius,
     transitionAngleDeg,
     vertHeight,
     deckLength,
-    bottomTransitionLength,
     ribThicknessMm,
     joistDepthMm,
     joistThicknessMm,
@@ -98,11 +97,10 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
     skinLayer2ThicknessMm,
   } = params;
   const jointDepth = joistDepthMm / 1000;
-  const half = bottomTransitionLength / 2;
   const joistThickness = joistThicknessMm / 1000;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const rawPoints = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const notch = copingNotch(
-    points,
+    rawPoints,
     radius,
     copingOdMm / 1000 / 2,
     copingHorizontalProtrusionMm / 1000,
@@ -111,29 +109,40 @@ function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
     (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
 
-  const mapWith = (mirrorX: (x: number) => number) => ([x, y]: [number, number]): [number, number] => [mirrorX(x), y + jointDepth];
-  const left = points.map(mapWith((x) => -half - x));
-  const right = points.map(mapWith((x) => half + x));
+  const shift = ([x, y]: [number, number]): [number, number] => [x, y + jointDepth];
+  const profile = rawPoints.map(shift);
+  const [tangentX, tangentY] = profile[0]; // bottom corner — the bottommost curve joist's centerline
+  const baseX = tangentX - joistThickness / 2; // that joist's inside face
+  const outerX = profile[profile.length - 1][0]; // deck's outer edge
 
-  const side = (profile: [number, number][], baseExtension: number, mirrorX: (x: number) => number): THREE.Shape => {
-    const [tangentX, tangentY] = profile[0]; // bottom corner — the bottommost curve joist's centerline
-    const baseX = tangentX + baseExtension; // that joist's inside face
-    const outerX = profile[profile.length - 1][0]; // deck's outer edge
-    const map = mapWith(mirrorX);
+  const points: [number, number][] = [[outerX, 0], profile[profile.length - 1], shift(notch.wallTop), shift(notch.wallBottom), shift(notch.shelfEnd)];
+  for (let i = notch.arcCutoffIndex; i >= 0; i--) points.push(profile[i]);
+  points.push([baseX, tangentY], [baseX, 0]);
+  return points;
+}
+
+/**
+ * Two mirrored copies of `ribLocalProfilePoints`, placed either side of the bottom transition
+ * (±bottomTransitionLength/2) — shared by the solid wedge and each individual rib. Mirroring
+ * just negates X (see ribLocalProfilePoints for why that alone is enough, base-inset sign
+ * included) — the resulting winding reversal doesn't matter since every rib/wedge material is
+ * THREE.DoubleSide (see main.ts).
+ */
+function halfPipeOutline(params: HalfPipeParams): THREE.Shape[] {
+  const half = params.bottomTransitionLength / 2;
+  const localPoints = ribLocalProfilePoints(params);
+
+  const side = (mirrorX: (x: number) => number): THREE.Shape => {
     const shape = new THREE.Shape();
-    shape.moveTo(outerX, 0);
-    shape.lineTo(...profile[profile.length - 1]); // deck's outer edge
-    shape.lineTo(...map(notch.wallTop)); // deck runs to the notch wall, not all the way to the original corner
-    shape.lineTo(...map(notch.wallBottom));
-    shape.lineTo(...map(notch.shelfEnd));
-    for (let i = notch.arcCutoffIndex; i >= 0; i--) shape.lineTo(...profile[i]);
-    shape.lineTo(baseX, tangentY);
-    shape.lineTo(baseX, 0);
+    localPoints.forEach(([x, y], i) => {
+      if (i === 0) shape.moveTo(mirrorX(x), y);
+      else shape.lineTo(mirrorX(x), y);
+    });
     shape.closePath();
     return shape;
   };
 
-  return [side(left, joistThickness / 2, (x) => -half - x), side(right, -joistThickness / 2, (x) => half + x)];
+  return [side((x) => -half - x), side((x) => half + x)];
 }
 
 /**
@@ -192,11 +201,27 @@ export function buildHalfPipeRibsBySection(params: HalfPipeParams): { edgeRibs: 
  * determines the wall's thickness off the ground, unchanged from before this was split into
  * members.
  */
+/**
+ * The bottom transition frame's two member lengths — plates (inset by the last curve joist's
+ * own thickness so they butt up against it, not into it) and studs (spanning between the
+ * plates' *inside* faces) — factored out so the 2D part drawings (see
+ * drawings/halfPipePartDrawings.ts) use the same lengths `buildBottomTransitionFrame` actually
+ * builds to, instead of re-deriving them.
+ */
+export function bottomTransitionMemberLengths(params: HalfPipeParams): { plateLength: number; studLength: number } {
+  const { bottomTransitionLength, joistThicknessMm, width } = params;
+  const thickness = joistThicknessMm / 1000;
+  const outsideZ = width / 2; // the outside face of each edge rib
+  const insideZ = outsideZ - thickness; // the plates' inside faces
+  return { plateLength: bottomTransitionLength - thickness, studLength: insideZ * 2 };
+}
+
 export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const { bottomTransitionLength, joistDepthMm, joistThicknessMm, width, internalStudCount } = params;
+  const { joistDepthMm, joistThicknessMm, width, internalStudCount } = params;
   const jointDepth = joistDepthMm / 1000;
   const thickness = joistThicknessMm / 1000;
   const outsideZ = width / 2; // the outside face of each edge rib
+  const { plateLength, studLength } = bottomTransitionMemberLengths(params);
 
   const member = (spanZ: boolean, span: number, x: number, z: number): THREE.BufferGeometry => {
     const geometry = spanZ ? new THREE.BoxGeometry(thickness, jointDepth, span) : new THREE.BoxGeometry(span, jointDepth, thickness);
@@ -204,16 +229,13 @@ export function buildBottomTransitionFrame(params: HalfPipeParams): THREE.Buffer
     return geometry;
   };
 
-  // Inset by the last curve joist's own thickness so the plates butt up against it, not into it.
-  const plateLength = bottomTransitionLength - thickness;
   const plates = [-1, 1].map((side) => member(false, plateLength, 0, side * (outsideZ - thickness / 2)));
 
-  const insideZ = outsideZ - thickness; // the plates' inside faces
   const studCount = internalStudCount + 2;
   const studSpan = plateLength - thickness; // inset so the end studs' outer faces meet the (now shorter) plate ends
   const studs = Array.from({ length: studCount }, (_, i) => {
     const x = -studSpan / 2 + (studSpan * i) / (studCount - 1);
-    return member(true, insideZ * 2, x, 0);
+    return member(true, studLength, x, 0);
   });
 
   return [...plates, ...studs];
@@ -451,22 +473,32 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
  * surface ends up `ribThicknessMm` above that line, since the line itself is only a stand-in for
  * the finished surface height and hasn't been repositioned yet (see features.md).
  */
-export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const {
+/**
+ * The deck board's own X run — from the notch's vertical wall (`notch.wallTop`) out to the
+ * rib's own outer edge (`deckOuter`) — factored out so the 2D part drawings (see
+ * drawings/halfPipePartDrawings.ts) use the same length `buildHalfPipeDeck` actually builds to.
+ */
+export function deckBoardLength(params: HalfPipeParams): number {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm } =
+    params;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const deckOuter = points[points.length - 1];
+  const notch = copingNotch(
+    points,
     radius,
-    transitionAngleDeg,
-    vertHeight,
-    deckLength,
-    bottomTransitionLength,
-    width,
-    ribThicknessMm,
-    joistDepthMm,
-    copingOdMm,
-    copingHorizontalProtrusionMm,
-    copingVerticalProtrusionMm,
-    skinLayer1ThicknessMm,
-    skinLayer2ThicknessMm,
-  } = params;
+    copingOdMm / 1000 / 2,
+    copingHorizontalProtrusionMm / 1000,
+    copingVerticalProtrusionMm / 1000,
+    ribThicknessMm / 1000,
+    (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
+  );
+  const [wallX] = notch.wallTop;
+  return Math.abs(deckOuter[0] - wallX);
+}
+
+export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, ribThicknessMm, joistDepthMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm } =
+    params;
   const half = bottomTransitionLength / 2;
   const jointDepth = joistDepthMm / 1000;
   const ribThickness = ribThicknessMm / 1000;
@@ -521,28 +553,9 @@ export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[
  * gapped. Empty (see tileCenteredClipped) once that extension alone already reaches the ramp's
  * centerline. Also clipped at the ramp's edges (±width/2).
  */
-export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const {
-    radius,
-    transitionAngleDeg,
-    vertHeight,
-    deckLength,
-    bottomTransitionLength,
-    joistDepthMm,
-    ribThicknessMm,
-    copingOdMm,
-    copingHorizontalProtrusionMm,
-    copingVerticalProtrusionMm,
-    skinLayer1ThicknessMm,
-    skinLayer2ThicknessMm,
-    skinSheetWidth,
-    skinSheetLength,
-    width,
-  } = params;
-  const half = bottomTransitionLength / 2;
-  const jointDepth = joistDepthMm / 1000; // the ribs' own drawn curve sits here in world Y — see halfPipeOutline's mapWith
-  const thickness = skinLayer1ThicknessMm / 1000;
-
+/** Layer 1's curve rows (see curveSheetRows) — factored out so buildHalfPipeSkinLayer1 and halfPipeSkinLayer1FlatSheetSizes (below) share one computation instead of each re-deriving the notch/sweep it depends on. */
+function layer1CurveRows(params: HalfPipeParams): { t0: number; t1: number; flatExtension: number }[] {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinSheetWidth } = params;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const notch = copingNotch(
     points,
@@ -553,11 +566,18 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
     ribThicknessMm / 1000,
     (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
-  const sweep = notch.shelfAngle;
+  return curveSheetRows(radius, notch.shelfAngle, skinSheetWidth, skinSheetWidth);
+}
+
+export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { radius, bottomTransitionLength, joistDepthMm, skinLayer1ThicknessMm, skinSheetLength, width } = params;
+  const half = bottomTransitionLength / 2;
+  const jointDepth = joistDepthMm / 1000; // the ribs' own drawn curve sits here in world Y — see halfPipeOutline's mapWith
+  const thickness = skinLayer1ThicknessMm / 1000;
 
   const sheets: THREE.BufferGeometry[] = [];
 
-  const rows = curveSheetRows(radius, sweep, skinSheetWidth, skinSheetWidth);
+  const rows = layer1CurveRows(params);
   const curveZColumns = tileFromEdgeClipped(width / 2, skinSheetLength);
   for (const { t0, t1, flatExtension } of rows) {
     for (const [zStart, zEnd] of curveZColumns) {
@@ -575,18 +595,7 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
     }
   }
 
-  const groundFlatExtension = rows[rows.length - 1].flatExtension;
-  const reducedHalf = half - groundFlatExtension;
-  const longEdgeAlongX = {
-    xSegments: tileCenteredClipped(reducedHalf, skinSheetLength),
-    zRows: tileFromEdgeClipped(width / 2, skinSheetWidth),
-  };
-  const longEdgeAlongZ = {
-    xSegments: tileCenteredClipped(reducedHalf, skinSheetWidth),
-    zRows: tileFromEdgeClipped(width / 2, skinSheetLength),
-  };
-  const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
-  const { xSegments: flatXSegments, zRows: flatZRows } = countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  const { xSegments: flatXSegments, zRows: flatZRows } = layer1FlatSheetLayout(params, rows);
   for (const [xStart, xEnd] of flatXSegments) {
     for (const [zStart, zEnd] of flatZRows) {
       sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, jointDepth));
@@ -594,6 +603,64 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
   }
 
   return sheets;
+}
+
+/**
+ * The bottom transition's own flat skin coverage region (whatever the curve rows don't already
+ * reach — see curveSheetRows' flatExtension) tiled into sheets, picking whichever orientation
+ * needs fewer of them (chooseFlatSheetLayout, skin.ts). Factored out of buildHalfPipeSkinLayer1
+ * so halfPipeSkinLayer1FlatSheetSizes (below) — which the 2D drawings tab and bill of materials
+ * both need, since this region's own leftover piece is a real, non-full-size sheet neither of
+ * them otherwise knows about — can't drift from what's actually built. `rows` (from
+ * layer1CurveRows) is a parameter rather than recomputed here, since every caller already has it.
+ */
+function layer1FlatSheetLayout(params: HalfPipeParams, rows: { flatExtension: number }[]): FlatSheetLayout {
+  const { bottomTransitionLength, skinSheetWidth, skinSheetLength, width } = params;
+  const groundFlatExtension = rows[rows.length - 1].flatExtension;
+  const reducedHalf = bottomTransitionLength / 2 - groundFlatExtension;
+  return chooseFlatSheetLayout(reducedHalf, width / 2, skinSheetLength, skinSheetWidth);
+}
+
+export interface SkinFlatSheetSize {
+  lengthMm: number; // the larger of the piece's two spans
+  widthMm: number; // the smaller of the piece's two spans
+  count: number;
+}
+
+/**
+ * Groups a flat-coverage layout's individual (xSpan x zSpan) pieces by rounded-mm size — a
+ * layout can in general produce more than one distinct size (e.g. a clipped edge piece
+ * alongside a full-size one), not just the single leftover piece typical slider values happen
+ * to produce, so this doesn't assume there's only one.
+ */
+function groupFlatSheetSizes(layout: FlatSheetLayout): SkinFlatSheetSize[] {
+  const sizes = new Map<string, SkinFlatSheetSize>();
+  for (const [xStart, xEnd] of layout.xSegments) {
+    for (const [zStart, zEnd] of layout.zRows) {
+      const a = Math.round((xEnd - xStart) * 1000);
+      const b = Math.round((zEnd - zStart) * 1000);
+      const lengthMm = Math.max(a, b);
+      const widthMm = Math.min(a, b);
+      const key = `${lengthMm}x${widthMm}`;
+      const existing = sizes.get(key);
+      if (existing) existing.count++;
+      else sizes.set(key, { lengthMm, widthMm, count: 1 });
+    }
+  }
+  return [...sizes.values()];
+}
+
+/**
+ * Layer 1's flat (bottom-transition) skin coverage, sized rather than built — the curve rows
+ * (see buildHalfPipeSkinLayer1) don't always reach the ramp's own centerline, and whatever's
+ * left is tiled by sheet, but that coverage region's own size is "whatever's left of
+ * bottomTransitionLength" — a continuously variable leftover, not a fixed fraction of
+ * skinSheetLength/skinSheetWidth — so neither the 2D drawings tab nor the bill of materials can
+ * just assume every layer 1 sheet is the standard size. Empty if the curve rows already reach
+ * (or pass) the centerline, i.e. there's no flat coverage at all (see chooseFlatSheetLayout).
+ */
+export function halfPipeSkinLayer1FlatSheetSizes(params: HalfPipeParams): SkinFlatSheetSize[] {
+  return groupFlatSheetSizes(layer1FlatSheetLayout(params, layer1CurveRows(params)));
 }
 
 /**
@@ -626,35 +693,9 @@ export function buildHalfPipeSkinLayer1(params: HalfPipeParams): THREE.BufferGeo
  * coverage on the bottom transition (using layer 2's own sheet size and its own
  * flatExtension) — not staggered against layer 1's flat sheets too; see features.md.
  */
-export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const {
-    radius,
-    transitionAngleDeg,
-    vertHeight,
-    deckLength,
-    bottomTransitionLength,
-    joistDepthMm,
-    ribThicknessMm,
-    copingOdMm,
-    copingHorizontalProtrusionMm,
-    copingVerticalProtrusionMm,
-    skinLayer1ThicknessMm,
-    skinLayer2ThicknessMm,
-    skinSheetLength,
-    skinLayer2SheetWidth,
-    skinLayer2SheetLength,
-    width,
-  } = params;
-  const half = bottomTransitionLength / 2;
-  const outerOffset = skinLayer1ThicknessMm / 1000; // layer 2 sits on top of layer 1, not the bare curve
-  // Curve sheets' own local Y already bakes outerOffset in (via rOuter/rInner in buildSkinCurveSheet),
-  // so they only need the bare joist depth here — adding outerOffset again would double-count it.
-  // Flat sheets have no such baked-in offset, so they need it added explicitly to sit on top of
-  // layer 1's own flat sheets, not the joists directly.
-  const curveJointDepth = joistDepthMm / 1000;
-  const flatY = curveJointDepth + outerOffset;
-  const thickness = skinLayer2ThicknessMm / 1000;
-
+/** Layer 2's curve rows and coping notch together — factored out so buildHalfPipeSkinLayer2 and halfPipeSkinLayer2FlatSheetSizes (below) share one computation instead of each re-deriving it; buildHalfPipeSkinLayer2 needs the notch itself too (for pipeTouch), not just the rows layer 1's equivalent helper stops at. */
+function layer2CurveRowsAndNotch(params: HalfPipeParams): { rows: { t0: number; t1: number; flatExtension: number }[]; notch: ReturnType<typeof copingNotch> } {
+  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinLayer2SheetWidth } = params;
   const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
   const notch = copingNotch(
     points,
@@ -665,13 +706,28 @@ export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeo
     ribThicknessMm / 1000,
     (skinLayer1ThicknessMm + skinLayer2ThicknessMm) / 1000,
   );
-  const sweep = notch.shelfAngle;
+  const rows = curveSheetRows(radius, notch.shelfAngle, skinLayer2SheetWidth, skinLayer2SheetWidth / 2);
+  return { rows, notch };
+}
+
+export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeometry[] {
+  const { radius, bottomTransitionLength, joistDepthMm, copingOdMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinSheetLength, skinLayer2SheetLength, width } = params;
+  const half = bottomTransitionLength / 2;
+  const outerOffset = skinLayer1ThicknessMm / 1000; // layer 2 sits on top of layer 1, not the bare curve
+  // Curve sheets' own local Y already bakes outerOffset in (via rOuter/rInner in buildSkinCurveSheet),
+  // so they only need the bare joist depth here — adding outerOffset again would double-count it.
+  // Flat sheets have no such baked-in offset, so they need it added explicitly to sit on top of
+  // layer 1's own flat sheets, not the joists directly.
+  const curveJointDepth = joistDepthMm / 1000;
+  const flatY = curveJointDepth + outerOffset;
+  const thickness = skinLayer2ThicknessMm / 1000;
+
+  const { rows, notch } = layer2CurveRowsAndNotch(params);
   const pipeRadius = copingOdMm / 1000 / 2;
   const pipeTouch = { pipeCenter: notch.pipeCenter, pipeRadius };
 
   const sheets: THREE.BufferGeometry[] = [];
 
-  const rows = curveSheetRows(radius, sweep, skinLayer2SheetWidth, skinLayer2SheetWidth / 2);
   const curveZColumns = staggeredZColumns(width / 2, skinSheetLength, skinLayer2SheetLength);
   rows.forEach(({ t0, t1, flatExtension }, row) => {
     const coping = row === 0 ? pipeTouch : undefined; // only the row actually reaching the notch
@@ -690,18 +746,7 @@ export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeo
     }
   });
 
-  const groundFlatExtension = rows[rows.length - 1].flatExtension;
-  const reducedHalf = half - groundFlatExtension;
-  const longEdgeAlongX = {
-    xSegments: tileCenteredClipped(reducedHalf, skinLayer2SheetLength),
-    zRows: tileFromEdgeClipped(width / 2, skinLayer2SheetWidth),
-  };
-  const longEdgeAlongZ = {
-    xSegments: tileCenteredClipped(reducedHalf, skinLayer2SheetWidth),
-    zRows: tileFromEdgeClipped(width / 2, skinLayer2SheetLength),
-  };
-  const countOf = (layout: typeof longEdgeAlongX) => layout.xSegments.length * layout.zRows.length;
-  const { xSegments: flatXSegments, zRows: flatZRows } = countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+  const { xSegments: flatXSegments, zRows: flatZRows } = layer2FlatSheetLayout(params, rows);
   for (const [xStart, xEnd] of flatXSegments) {
     for (const [zStart, zEnd] of flatZRows) {
       sheets.push(buildSkinFlatSheet(xStart, xEnd, zStart, zEnd, thickness, flatY));
@@ -709,6 +754,34 @@ export function buildHalfPipeSkinLayer2(params: HalfPipeParams): THREE.BufferGeo
   }
 
   return sheets;
+}
+
+/** Layer 2's own version of layer1FlatSheetLayout — its own, independent sheet size, otherwise identical reasoning. */
+function layer2FlatSheetLayout(params: HalfPipeParams, rows: { flatExtension: number }[]): FlatSheetLayout {
+  const { bottomTransitionLength, skinLayer2SheetWidth, skinLayer2SheetLength, width } = params;
+  const groundFlatExtension = rows[rows.length - 1].flatExtension;
+  const reducedHalf = bottomTransitionLength / 2 - groundFlatExtension;
+  return chooseFlatSheetLayout(reducedHalf, width / 2, skinLayer2SheetLength, skinLayer2SheetWidth);
+}
+
+/**
+ * Layer 2's own version of halfPipeSkinLayer1FlatSheetSizes — same "this region's own leftover
+ * piece is a real, non-full-size sheet" reasoning, layer 2's own sheet size.
+ */
+export function halfPipeSkinLayer2FlatSheetSizes(params: HalfPipeParams): SkinFlatSheetSize[] {
+  return groupFlatSheetSizes(layer2FlatSheetLayout(params, layer2CurveRowsAndNotch(params).rows));
+}
+
+/**
+ * How many of layer 2's curve sheets are the narrower top-of-curve starter (see
+ * skinLayer2NarrowCurveSheetPartDrawing) rather than a standard-size sheet — always exactly
+ * row 0 of curveSheetRows' output (one per Z column, both sides), regardless of how many rows
+ * there are in total (curveSheetRows always returns at least one row), so this doesn't need the
+ * row count itself, just the same Z-column tiling buildHalfPipeSkinLayer2 already uses.
+ */
+export function halfPipeSkinLayer2NarrowStarterCount(params: HalfPipeParams): number {
+  const { skinSheetLength, skinLayer2SheetLength, width } = params;
+  return staggeredZColumns(width / 2, skinSheetLength, skinLayer2SheetLength).length * 2;
 }
 
 /**
