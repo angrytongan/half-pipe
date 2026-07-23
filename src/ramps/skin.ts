@@ -232,6 +232,26 @@ export function tileCenteredClipped(halfSpan: number, size: number): [number, nu
   return segments;
 }
 
+export interface FlatSheetLayout {
+  xSegments: [number, number][];
+  zRows: [number, number][];
+}
+
+/**
+ * Picks whichever orientation (sheet's long edge along X, or along Z) tiles the bottom
+ * transition's own flat coverage region with fewer total sheets — factored out of
+ * buildHalfPipeSkinLayer1/2 in halfPipe.ts, which otherwise each inlined this identical
+ * comparison. Shared so callers needing just the resulting sheet *sizes* (e.g. the 2D drawings
+ * tab and bill of materials, which need to know about the region's own non-full-size leftover
+ * piece) can't drift from what the 3D view actually builds.
+ */
+export function chooseFlatSheetLayout(reducedHalf: number, halfWidth: number, sheetLength: number, sheetWidth: number): FlatSheetLayout {
+  const longEdgeAlongX: FlatSheetLayout = { xSegments: tileCenteredClipped(reducedHalf, sheetLength), zRows: tileFromEdgeClipped(halfWidth, sheetWidth) };
+  const longEdgeAlongZ: FlatSheetLayout = { xSegments: tileCenteredClipped(reducedHalf, sheetWidth), zRows: tileFromEdgeClipped(halfWidth, sheetLength) };
+  const countOf = (layout: FlatSheetLayout) => layout.xSegments.length * layout.zRows.length;
+  return countOf(longEdgeAlongZ) < countOf(longEdgeAlongX) ? longEdgeAlongZ : longEdgeAlongX;
+}
+
 /** One flat skin sheet: a box spanning [xStart,xEnd] x [zStart,zEnd], sitting on top of y (its bottom face), extending up by thickness. */
 export function buildSkinFlatSheet(xStart: number, xEnd: number, zStart: number, zEnd: number, thickness: number, y: number): THREE.BufferGeometry {
   const geometry = new THREE.BoxGeometry(xEnd - xStart, thickness, zEnd - zStart);

@@ -1,4 +1,4 @@
-import { bottomTransitionMemberLengths, deckBoardLength, ribLocalProfilePoints, type HalfPipeParams } from "../ramps/halfPipe";
+import { bottomTransitionMemberLengths, deckBoardLength, halfPipeSkinLayer1FlatSheetSizes, halfPipeSkinLayer2FlatSheetSizes, ribLocalProfilePoints, type HalfPipeParams } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 import type { Point } from "./svgDimension";
 
@@ -106,6 +106,7 @@ export function ribPartDrawing(params: HalfPipeParams): PartDrawing {
 
   // See ribLocalProfilePoints: [outer,0], deckOuter, wallTop, wallBottom, shelfEnd, ...arc down
   // to the curve's own ground-tangent start, [baseX, jointDepth], [baseX, 0].
+  const deckOuter = points[1];
   const [wallTop, wallBottom, shelfEnd] = [points[2], points[3], points[4]];
   const curveStart = points[points.length - 2]; // [baseX, jointDepth] — where the flat base meets the curve
   const groundAtBase = points[points.length - 1]; // [baseX, 0]
@@ -126,6 +127,11 @@ export function ribPartDrawing(params: HalfPipeParams): PartDrawing {
       { start: [maxX, minY], end: [maxX, maxY], offsetDir: [1, 0], offsetDistance, text: formatMm(height) },
       // Ground line (y = minY) runs +X — material is toward +Y there, so -Y points away from it.
       { start: [minX, minY], end: [maxX, minY], offsetDir: [0, -1], offsetDistance, text: formatMm(width) },
+      // The flat deck's own top edge (deckOuter to wallTop, both at maxY) runs -X (outer edge
+      // toward the notch) — material is toward -Y there, so +Y points away from it. Length
+      // matches deckBoardLength exactly (same two points, before this drawing's own mm scaling),
+      // not a separately-derived value.
+      { start: deckOuter, end: wallTop, offsetDir: [0, 1], offsetDistance, text: formatMm(deckBoardLength(params) * 1000) },
       // The base's small closing edge (x = minX) runs -Y (down to the ground) — material is
       // toward +X there, so -X points away from it. Same side the overall height dimension used
       // to sit on, now free.
@@ -177,6 +183,22 @@ export function skinLayer2SheetPartDrawing(params: HalfPipeParams): PartDrawing 
 }
 
 /**
+ * The curve rows (see buildHalfPipeSkinLayer1) don't always reach the bottom transition's own
+ * centerline, and whatever's left gets its own flat coverage sheets — sized by "whatever's
+ * left of bottomTransitionLength" (halfPipeSkinLayer1FlatSheetSizes, halfPipe.ts), not a fixed
+ * fraction of skinSheetLength/skinSheetWidth like layer 2's top-of-curve starter is. One
+ * drawing per distinct size actually present (ordinarily just one, but not assumed to be).
+ */
+export function skinLayer1FlatInfillPartDrawings(params: HalfPipeParams): PartDrawing[] {
+  return halfPipeSkinLayer1FlatSheetSizes(params).map(({ lengthMm, widthMm }) => rectanglePartDrawing("Skin layer 1 sheet — bottom transition (flat)", lengthMm, widthMm, params.skinLayer1ThicknessMm));
+}
+
+/** Layer 2's own version of skinLayer1FlatInfillPartDrawings — its own, independent sheet size, otherwise identical reasoning. */
+export function skinLayer2FlatInfillPartDrawings(params: HalfPipeParams): PartDrawing[] {
+  return halfPipeSkinLayer2FlatSheetSizes(params).map(({ lengthMm, widthMm }) => rectanglePartDrawing("Skin layer 2 sheet — bottom transition (flat)", lengthMm, widthMm, params.skinLayer2ThicknessMm));
+}
+
+/**
  * Not every layer 2 curve sheet is full-size: `curveSheetRows` (skin.ts) always starts layer
  * 2's tiling at the coping notch with a half-width row (`skinLayer2SheetWidth / 2`, not the
  * full width every other row uses) so its seams land staggered against layer 1's, rather than
@@ -203,7 +225,9 @@ export function allPartDrawings(params: HalfPipeParams): PartDrawing[] {
     bottomTransitionPlatePartDrawing(params),
     bottomTransitionStudPartDrawing(params),
     skinLayer1SheetPartDrawing(params),
+    ...skinLayer1FlatInfillPartDrawings(params),
     skinLayer2SheetPartDrawing(params),
     skinLayer2NarrowCurveSheetPartDrawing(params),
+    ...skinLayer2FlatInfillPartDrawings(params),
   ];
 }

@@ -334,13 +334,18 @@ the curve rows' own `flatExtension` doesn't already reach — nothing bends ther
 grain constraint on orientation, unlike the curve sheets. Both orientations (long edge along X,
 long edge along Z) are tiled and compared, and whichever needs fewer total sheets wins (ties
 keep long-edge-X) — forcing one direction can mean more cuts/wasted offcuts than the ramp's own
-proportions actually call for. Centered at X=0 (`tileCenteredClipped`, skin.ts), tiled outward,
-clipped to `±(half - flatExtension)` (both curve rows share the same `flatExtension`, by
-left/right symmetry) so they butt flush against the curve rows' own reach — no gap, no overlap.
-Empty if that reach alone already covers to the ramp's centerline (`tileCenteredClipped` returns
-`[]` for a non-positive span). Also clipped at the ramp's edges (±width/2). Layer 2's own flat
-sheets use its own sheet size and its own `flatExtension`, but aren't staggered against layer
-1's flat sheets — see features.md.
+proportions actually call for; `chooseFlatSheetLayout` (skin.ts) is this comparison, factored out
+of both `buildHalfPipeSkinLayer1`/`buildHalfPipeSkinLayer2` (which otherwise each inlined the
+identical logic) since the 2D drawings tab and bill of materials need it too — this coverage
+region's own leftover piece is a real, non-standard-size sheet (see `halfPipeSkinLayer1FlatSheetSizes`/
+`halfPipeSkinLayer2FlatSheetSizes`, `halfPipe.ts`), not a scrap piece safely ignorable, and both
+of those consumers used to silently assume every sheet was the standard size. Centered at X=0
+(`tileCenteredClipped`, skin.ts), tiled outward, clipped to `±(half - flatExtension)` (both curve
+rows share the same `flatExtension`, by left/right symmetry) so they butt flush against the curve
+rows' own reach — no gap, no overlap. Empty if that reach alone already covers to the ramp's
+centerline (`tileCenteredClipped` returns `[]` for a non-positive span). Also clipped at the
+ramp's edges (±width/2). Layer 2's own flat sheets use its own sheet size and its own
+`flatExtension`, but aren't staggered against layer 1's flat sheets — see features.md.
 
 **Layer 2's differences from layer 1** (all in `buildHalfPipeSkinLayer2`):
 1. *Staggered seams, arc direction* — `curveSheetRows`' topmost row is half-width
@@ -466,11 +471,14 @@ separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Lin
     the drawing can't drift from what's actually extruded for every rib in the 3D view —
     including its two fictitious ground-closing edges (see decisions.md/`halfPipeOutline`),
     since those are what's actually rendered, not a hypothetically "more correct" outline.
-    Only the overall envelope (height, base run) gets a dimension line; radius, transition
-    angle, vert height (when present), and deck length are text labels instead — an
-    angular-dimension variant isn't built anywhere yet (see features.md), so hand-dimensioning
-    the curve/notch itself would be new scope, not reuse. Rib thickness (the extrusion depth,
-    not drawable in a flat profile view) is a text label too.
+    Dimensioned: the overall envelope (height, base run along the ground), the flat deck's own
+    top run (outer edge to the notch's wall — same length as `deckBoardLength`, not the raw
+    `deckLength` param, since the notch cuts into it), the small base edge between the ground
+    and the curve's own start (at `joistDepthMm`), and the notch's own wall/shelf cuts.
+    Radius, transition angle, vert height (when present), and the raw `deckLength` param are
+    text labels instead — an angular-dimension variant isn't built anywhere yet (see
+    features.md), so hand-dimensioning the curve itself would be new scope, not reuse. Rib
+    thickness (the extrusion depth, not drawable in a flat profile view) is a text label too.
   - **Deck board** — a length (`deckBoardLength`, also extracted from `halfPipe.ts`'s
     `buildHalfPipeDeck`) × width (`width`) rectangle, ribThicknessMm labeled.
   - **Joist** — length (one bay's own clear span, from `ribZPositions`' first pair — every
@@ -482,7 +490,15 @@ separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Lin
   - **Skin layer 1/2 sheet** — the *flat* sheet-size params (`skinSheetLength`/`skinSheetWidth`,
     `skinLayer2SheetLength`/`skinLayer2SheetWidth`) as a rectangle, thickness labeled — the
     stock size before it's bent onto the curve, not any of the tiled/clipped as-installed
-    pieces `skin.ts` actually cuts (see Skin above).
+    pieces `skin.ts` actually cuts (see Skin above). Plus one drawing per distinct size actually
+    present in each layer's own flat (bottom-transition) coverage — `skinLayer1/2FlatInfillPartDrawings`,
+    sized by `halfPipeSkinLayer1/2FlatSheetSizes` (`halfPipe.ts`) — since that coverage's own
+    leftover piece is a real, continuously variable size (whatever's left of
+    `bottomTransitionLength` once the curve rows' own `flatExtension` is subtracted), not the
+    standard sheet size; both the 2D drawings tab and the bill of materials used to silently
+    assume every layer's sheets were one uniform size, which was simply wrong. Layer 2's
+    narrower top-of-curve starter row (below) is a separate, *fixed*-fraction case and unaffected
+    by this.
 
   Every non-rib part is built through one shared `rectanglePartDrawing` helper (a box's own
   length × height rectangle, third dimension as a text label) rather than six near-identical
@@ -498,6 +514,71 @@ separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Lin
 `src/main.ts`'s `rebuildPartDrawings` (called from `rebuildRamp`, same as `rebuildDimensions`)
 clears and rebuilds `#drawings-list` from `allPartDrawings(currentParams)` every time — cheap
 DOM/SVG work, so it's rebuilt unconditionally rather than only when that tab is visible.
+
+## Bill of materials
+
+The "Bill of materials" tab shows one row (part name, quantity, dimensions, material) per part
+*type* — the same grouping the 2D drawings tab uses (a rib is one row regardless of its
+edge/internal role, a joist one row regardless of curve/deck role, since every part sharing a row
+is dimensionally identical). `src/construction/halfPipeBom.ts`'s `calculateHalfPipeBom` is a
+plain data function (no DOM, no Three.js-specific types in its return value) mirroring
+`../obstacle`'s `src/construction/` pattern — but unlike `earthenBom.ts` there, which integrates
+a profile curve to derive a fill volume from scratch, every quantity here comes from calling the
+same build functions the 3D view already calls (`buildHalfPipeRibsBySection`,
+`buildHalfPipeJoistsBySection`, `buildBottomTransitionFrame`, `buildHalfPipeDeck`,
+`buildHalfPipeSkinLayer1`/`2`, `halfPipeCopingCenters`) and reading `.length` off their result,
+rather than a re-derived count formula — the joist landmark count especially (see
+`buildHalfPipeJoistsBySection`'s own doc comment) would be easy to get subtly wrong reimplementing
+independently, the same "can't drift from what's built" reasoning the 2D drawings already follow.
+Bottom transition stud count is read as `buildBottomTransitionFrame(params).length - 2` (that
+function always returns `[...plates (2), ...studs]`) rather than `internalStudCount + 2` directly,
+for the same reason.
+
+Rib quantity is `(edgeRibs.length + internalRibs.length) * 2`, not the bare array length: each
+`buildHalfPipeRibsBySection` array entry is one `THREE.BufferGeometry`, but `halfPipeOutline`
+always extrudes *two* mirrored, physically disjoint shapes (left/right transition — they don't
+span the bottom transition gap, see Structure above) into that single object, purely so the 3D
+view has one mesh per Z position instead of two. So each entry is actually two separate physical
+rib pieces, not one — the 2D drawing (`ribPartDrawing`) already draws just the one-sided profile
+these dimensions describe, which is what first exposed the undercount (BOM said 4 ribs at
+defaults; the correct count both matches `ribZPositions`' 4 Z-positions × 2 sides and is what
+`ribPartDrawing` implies by drawing a single side at all).
+
+Joist length is a real computed number (`ribZPositions`' first bay's own inside-face gap, same
+value `joistPartDrawing` uses), not a "varies by bay" hedge an earlier version of this file
+shipped with — every curve/deck joist actually shares one length, since `ribZPositions` spaces
+every section evenly (see `joistPartDrawing`'s own doc comment); there was no reason to hedge.
+
+Two cut variants get their own row(s), broken out of the standard "Skin layer N sheet" row's
+quantity (which would otherwise silently mix sizes together, as it used to): layer 2's narrower
+top-of-curve starter (`Skin layer 2 sheet — top-of-curve starter (half width)`, quantity from
+`halfPipeSkinLayer2NarrowStarterCount` — a fixed half-width fraction of the standard sheet, so a
+count alone is enough, no separate computed size needed) and each layer's own bottom-transition
+flat infill (`Skin layer 1/2 sheet — bottom transition (flat)`, quantity/size from
+`halfPipeSkinLayer1/2FlatSheetSizes`), whose size is a continuously variable leftover instead —
+whatever's left of `bottomTransitionLength` once the curve rows' own `flatExtension` is
+subtracted, not a fixed fraction of anything. An earlier version of this file lumped both into
+the standard row's count, silently claiming every layer 1 sheet was one uniform size when it
+wasn't (5 sheets shown, all as if 2400×1200mm, when one was actually a 2400×1098mm leftover) —
+and similarly for layer 2's narrow starter. The standard row's own quantity is
+`builtLength - flatInfillCount (- narrowStarterCount for layer 2)`, not the bare built array
+length, for the same reason. The 2D drawings tab already had its own dimensioned drawing for the
+narrow starter (`skinLayer2NarrowCurveSheetPartDrawing`) before this — only the BOM was missing
+it. Material labels reflect the actual stock each part is cut from, not just "wood": ribs and
+deck boards share the rib stock
+(`ribThicknessMm`) and are plywood (a curved rib profile can't be cut from dimensional lumber);
+joists and the bottom transition's plates/studs share the joist stock
+(`joistThicknessMm`/`joistDepthMm`) and are dimensional lumber; skin sheets are Plywood/OSB;
+coping is labeled Steel pipe.
+
+`src/main.ts`'s `rebuildBom` (called from `rebuildRamp`, same as `rebuildPartDrawings`) clears and
+rebuilds `#bom-container` from `calculateHalfPipeBom(currentParams)` every time — same
+rebuilt-unconditionally reasoning as the 2D drawings tab. A disclaimer ("Planning estimate
+only...") sits below the table, reusing `obstacle`'s own BOM disclaimer text (its `.bom-status`
+safe/unsafe badge pattern doesn't apply here — there's no single pass/fail check this BOM makes,
+unlike the roller's slope check). Out of scope for now (see features.md): soundness checks (rib
+spacing vs. plywood span rating), fastener counts, cost estimates, and stock-length cutting
+optimization.
 
 ## Scene
 

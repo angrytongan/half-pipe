@@ -6,11 +6,13 @@ import {
   deckBoardPartDrawing,
   joistPartDrawing,
   ribPartDrawing,
+  skinLayer1FlatInfillPartDrawings,
   skinLayer1SheetPartDrawing,
+  skinLayer2FlatInfillPartDrawings,
   skinLayer2NarrowCurveSheetPartDrawing,
   skinLayer2SheetPartDrawing,
 } from "./halfPipePartDrawings";
-import { bottomTransitionMemberLengths, deckBoardLength, HALF_PIPE_DEFAULTS, ribLocalProfilePoints } from "../ramps/halfPipe";
+import { bottomTransitionMemberLengths, deckBoardLength, HALF_PIPE_DEFAULTS, halfPipeSkinLayer1FlatSheetSizes, halfPipeSkinLayer2FlatSheetSizes, ribLocalProfilePoints } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 
 function outlineBounds(outline: [number, number][]) {
@@ -20,7 +22,10 @@ function outlineBounds(outline: [number, number][]) {
 }
 
 describe("allPartDrawings", () => {
-  it("returns one drawing each for the rib, deck board, joist, plate, stud, both full skin sheets, and layer 2's narrower top-of-curve starter", () => {
+  // At defaults, both skin layers' flat coverage happens to reduce to exactly one distinct
+  // leftover size each — this list isn't a fixed length in general (halfPipeSkinLayer1/2FlatSheetSizes
+  // can return more than one entry, or none), just what defaults produce right now.
+  it("returns one drawing each for the rib, deck board, joist, plate, stud, both full skin sheets, layer 2's narrower top-of-curve starter, and each layer's own bottom-transition flat infill", () => {
     const titles = allPartDrawings(HALF_PIPE_DEFAULTS).map((d) => d.title);
     expect(titles).toEqual([
       "Rib",
@@ -29,9 +34,35 @@ describe("allPartDrawings", () => {
       "Bottom transition plate",
       "Bottom transition stud",
       "Skin layer 1 sheet (flat, before bending)",
+      "Skin layer 1 sheet — bottom transition (flat)",
       "Skin layer 2 sheet (flat, before bending)",
       "Skin layer 2 sheet — top-of-curve starter (half width, flat, before bending)",
+      "Skin layer 2 sheet — bottom transition (flat)",
     ]);
+  });
+});
+
+describe("skin layer flat-infill part drawings", () => {
+  it("dimensions layer 1's flat infill by its own real, non-standard leftover size — not skinSheetLength x skinSheetWidth", () => {
+    const sizes = halfPipeSkinLayer1FlatSheetSizes(HALF_PIPE_DEFAULTS);
+    const drawings = skinLayer1FlatInfillPartDrawings(HALF_PIPE_DEFAULTS);
+    expect(drawings).toHaveLength(sizes.length);
+    drawings.forEach((drawing, i) => {
+      expect(drawing.title).toBe("Skin layer 1 sheet — bottom transition (flat)");
+      expect(drawing.dimensions.map((d) => d.text)).toEqual([`${sizes[i].lengthMm}mm`, `${sizes[i].widthMm}mm`]);
+      expect(drawing.labels.lines).toEqual([`Thickness: ${HALF_PIPE_DEFAULTS.skinLayer1ThicknessMm}mm`]);
+    });
+  });
+
+  it("dimensions layer 2's flat infill by its own real, non-standard leftover size", () => {
+    const sizes = halfPipeSkinLayer2FlatSheetSizes(HALF_PIPE_DEFAULTS);
+    const drawings = skinLayer2FlatInfillPartDrawings(HALF_PIPE_DEFAULTS);
+    expect(drawings).toHaveLength(sizes.length);
+    drawings.forEach((drawing, i) => {
+      expect(drawing.title).toBe("Skin layer 2 sheet — bottom transition (flat)");
+      expect(drawing.dimensions.map((d) => d.text)).toEqual([`${sizes[i].lengthMm}mm`, `${sizes[i].widthMm}mm`]);
+      expect(drawing.labels.lines).toEqual([`Thickness: ${HALF_PIPE_DEFAULTS.skinLayer2ThicknessMm}mm`]);
+    });
   });
 });
 
@@ -118,9 +149,18 @@ describe("ribPartDrawing", () => {
     expect(widthDim.text).toBe(`${Math.round(maxX - minX)}mm`);
   });
 
+  it("dimensions the flat deck's own top run, from the outer edge to the notch's wall", () => {
+    const drawing = ribPartDrawing(HALF_PIPE_DEFAULTS);
+    const { maxY } = outlineBounds(drawing.outline[0]);
+    const deckTopDim = drawing.dimensions[2];
+    expect(deckTopDim.start[1]).toBe(maxY); // the very top of the profile
+    expect(deckTopDim.end[1]).toBe(maxY); // horizontal segment
+    expect(deckTopDim.text).toBe(`${Math.round(deckBoardLength(HALF_PIPE_DEFAULTS) * 1000)}mm`);
+  });
+
   it("dimensions the small base edge between the ground and the curve's own start, at joistDepthMm", () => {
     const drawing = ribPartDrawing(HALF_PIPE_DEFAULTS);
-    const baseEdgeDim = drawing.dimensions[2];
+    const baseEdgeDim = drawing.dimensions[3];
     expect(baseEdgeDim.text).toBe(`${HALF_PIPE_DEFAULTS.joistDepthMm}mm`);
     expect(baseEdgeDim.start[0]).toBe(baseEdgeDim.end[0]); // a vertical segment
     expect(baseEdgeDim.start[1]).toBe(0); // ground level
@@ -128,7 +168,7 @@ describe("ribPartDrawing", () => {
 
   it("dimensions the coping notch's own wall and shelf cuts", () => {
     const drawing = ribPartDrawing(HALF_PIPE_DEFAULTS);
-    const [, , , wallDim, shelfDim] = drawing.dimensions;
+    const [, , , , wallDim, shelfDim] = drawing.dimensions;
     expect(wallDim.start[0]).toBe(wallDim.end[0]); // wall is vertical
     expect(Number(wallDim.text.replace("mm", ""))).toBeGreaterThan(0);
     expect(shelfDim.start[1]).toBe(shelfDim.end[1]); // shelf is horizontal

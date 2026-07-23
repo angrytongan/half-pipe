@@ -297,10 +297,38 @@
       #viewport canvas {
         display: block;
       }
-      .placeholder-text {
-        padding: 1rem;
-        opacity: 0.6;
+      #bom-container {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        padding: 1.5rem;
+        box-sizing: border-box;
+      }
+      #bom-table {
+        width: 100%;
+        border-collapse: collapse;
         font-size: 0.9rem;
+      }
+      #bom-table th,
+      #bom-table td {
+        text-align: left;
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--border);
+      }
+      #bom-table th {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        opacity: 0.6;
+      }
+      #bom-table td.bom-qty {
+        font-variant-numeric: tabular-nums;
+      }
+      .bom-disclaimer {
+        margin-top: 1rem;
+        font-size: 0.8rem;
+        opacity: 0.7;
+        font-style: italic;
       }
       #drawings-list {
         position: absolute;
@@ -389,6 +417,14 @@
         #viewport canvas {
           width: 100% !important;
           height: auto !important;
+        }
+        /* Same on-screen positioning (absolute, inset: 0, clipped to the scrolling container)
+           as #drawings-list had before its own print fix — without this, the table would be
+           clipped to whatever fit the screen viewport instead of flowing across pages. */
+        #bom-container {
+          position: static;
+          overflow: visible;
+          padding: 0;
         }
         /* display: block (not grid) — print/page fragmentation (break-inside, break-after)
            inside a CSS Grid container is inconsistently supported across browsers (Safari's
@@ -558,7 +594,7 @@
           <div id="drawings-list"></div>
         </div>
         <div id="tab-bom" class="tab-panel" role="tabpanel" hidden>
-          <p class="placeholder-text">Bill of materials — coming soon.</p>
+          <div id="bom-container"></div>
         </div>
       </div>
     </div>

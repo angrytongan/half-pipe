@@ -16,7 +16,10 @@ import {
 import { buildHalfPipeDimensions, type HalfPipeDimension } from "./dimensions/halfPipeDimensions";
 import { allPartDrawings } from "./drawings/halfPipePartDrawings";
 import { renderPartDrawing } from "./drawings/renderPartDrawing";
+import { calculateHalfPipeBom } from "./construction/halfPipeBom";
 import { HistoryStack } from "./history";
+
+const BOM_DISCLAIMER = "Planning estimate only — not a substitute for a qualified builder's or engineer's assessment.";
 
 interface Footprint {
   length: number;
@@ -128,6 +131,7 @@ const availableSpace: Record<string, number> = { length: 6.7, width: 3, height: 
 
 const viewport = document.getElementById("viewport")!;
 const drawingsListEl = document.getElementById("drawings-list")!;
+const bomContainerEl = document.getElementById("bom-container")!;
 const spaceSlidersEl = document.getElementById("space-sliders")!;
 const spaceStatusEl = document.getElementById("space-status")!;
 const ribSlidersEl = document.getElementById("rib-sliders")!;
@@ -386,6 +390,20 @@ function rebuildPartDrawings(params: HalfPipeParams): void {
   }
 }
 
+/** Rebuilds the "Bill of materials" tab: one row per part type (see construction/halfPipeBom.ts) — cheap enough to redo on every param change, tab visible or not, same as rebuildPartDrawings. */
+function rebuildBom(params: HalfPipeParams): void {
+  const rows = calculateHalfPipeBom(params)
+    .map((line) => `<tr><td>${line.part}</td><td class="bom-qty">${line.quantity}</td><td>${line.dimensions}</td><td>${line.material}</td></tr>`)
+    .join("");
+  bomContainerEl.innerHTML = `
+    <table id="bom-table">
+      <thead><tr><th>Part</th><th>Qty</th><th>Dimensions</th><th>Material</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="bom-disclaimer">${BOM_DISCLAIMER}</p>
+  `;
+}
+
 let currentParams: HalfPipeParams = { ...RAMP.defaults };
 
 interface AppSnapshot {
@@ -550,6 +568,7 @@ function rebuildRamp(): void {
   rebuildCoping(currentParams, currentParams.width);
   rebuildDimensions(currentParams);
   rebuildPartDrawings(currentParams);
+  rebuildBom(currentParams);
   repositionFigures(currentParams);
   renderSpaceStatus();
 }

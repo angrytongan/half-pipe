@@ -2,12 +2,8 @@
 
 Not-yet-built features and known gaps. Check [decisions.md](decisions.md) for the scope/design reasoning behind an item before starting it. When an item is built, remove it from here and describe it in [status.md](status.md) instead.
 
-## Construction / BOM
+## Construction
 
-- [ ] Construction methods (plywood/OSB skin over a framed rib structure —
-      the standard mini-ramp build) and a bill of materials, mirroring
-      `../obstacle`'s `src/construction/` pattern (reference data +
-      per-method calculations, tested, wired into a live BOM panel).
 - [ ] Soundness checks (e.g. rib spacing vs. plywood span rating).
 
 ## Dimension lines
