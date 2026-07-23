@@ -420,6 +420,60 @@ function snapshot(): AppSnapshot {
   return { params: { ...currentParams }, space: { ...availableSpace } };
 }
 
+const CONTROLS_STORAGE_KEY = "half-pipe-controls";
+
+interface PersistedToggles {
+  dimensions: boolean;
+  scale: boolean;
+  skinLayer1: boolean;
+  skinLayer2: boolean;
+}
+
+interface PersistedControls extends AppSnapshot {
+  toggles: PersistedToggles;
+}
+
+/** Saves every current control value — sliders (via currentParams/availableSpace) and the display
+ * toggles/grain-direction select (read straight off the DOM, since those don't have their own JS
+ * state variable) — as one JSON blob. Not undo/redo history, and not camera/orbit-controls view
+ * state — just the controls a page reload should put back exactly where they were. */
+function persistControls(): void {
+  const state: PersistedControls = {
+    ...snapshot(),
+    toggles: {
+      dimensions: dimensionsToggle.checked,
+      scale: scaleToggle.checked,
+      skinLayer1: skinLayer1Toggle.checked,
+      skinLayer2: skinLayer2Toggle.checked,
+    },
+  };
+  localStorage.setItem(CONTROLS_STORAGE_KEY, JSON.stringify(state));
+}
+
+/** Reads persisted controls back, merged field-by-field over today's defaults/current toggle
+ * state rather than trusted outright — a future slider addition/removal, or corrupted/foreign
+ * JSON (try/catch), then just falls back to that field's default instead of crashing or leaving
+ * it undefined. Returns null (caller falls back to applyDefaults) if nothing's saved yet. */
+function loadPersistedControls(): PersistedControls | null {
+  const raw = localStorage.getItem(CONTROLS_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return {
+      params: { ...HALF_PIPE_DEFAULTS, ...parsed.params },
+      space: { ...availableSpace, ...parsed.space },
+      toggles: {
+        dimensions: parsed.toggles?.dimensions ?? dimensionsToggle.checked,
+        scale: parsed.toggles?.scale ?? scaleToggle.checked,
+        skinLayer1: parsed.toggles?.skinLayer1 ?? skinLayer1Toggle.checked,
+        skinLayer2: parsed.toggles?.skinLayer2 ?? skinLayer2Toggle.checked,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 function updateHistoryButtons(): void {
   undoBtn.disabled = !history.canUndo();
   redoBtn.disabled = !history.canRedo();
@@ -468,6 +522,9 @@ function renderSpaceStatus(): void {
     const detail = fits ? `${req.toFixed(2)}m / ${avail.toFixed(2)}m` : `${req.toFixed(2)}m / ${avail.toFixed(2)}m — over by ${(req - avail).toFixed(2)}m`;
     return `<div class="space-status ${fits ? "safe" : "unsafe"}">${label}: ${detail}</div>`;
   }).join("");
+  // Called both directly (available-space sliders) and from the end of rebuildRamp (every other
+  // slider, plus undo/redo/reset) — one hook here persists both without a second call site.
+  persistControls();
 }
 
 function rebuildRamp(): void {
@@ -647,6 +704,27 @@ function applyDefaults(): void {
   rebuildRamp();
 }
 
+/** Page-load counterpart to applyDefaults — same slider/rebuild wiring, but also puts the display
+ * toggles back where they were (their own visibility effects aren't wired to run on page load
+ * otherwise, only on each toggle's own "input" listener) and skips recording an undo entry,
+ * since this is the starting state, not a change from one. */
+function applyPersistedControls(loaded: PersistedControls): void {
+  currentParams = loaded.params;
+  Object.assign(availableSpace, loaded.space);
+  dimensionsToggle.checked = loaded.toggles.dimensions;
+  scaleToggle.checked = loaded.toggles.scale;
+  skinLayer1Toggle.checked = loaded.toggles.skinLayer1;
+  skinLayer2Toggle.checked = loaded.toggles.skinLayer2;
+
+  renderAllSliderGroups();
+  rebuildRamp();
+
+  dimensionsGroup.visible = dimensionsToggle.checked;
+  adultFigure.visible = scaleToggle.checked;
+  childFigure.visible = scaleToggle.checked;
+  updateSkinVisibility();
+}
+
 function resetParams(): void {
   history.record(snapshot());
   applyDefaults();
@@ -685,10 +763,12 @@ undoBtn.addEventListener("click", undo);
 redoBtn.addEventListener("click", redo);
 dimensionsToggle.addEventListener("input", () => {
   dimensionsGroup.visible = dimensionsToggle.checked;
+  persistControls();
 });
 scaleToggle.addEventListener("input", () => {
   adultFigure.visible = scaleToggle.checked;
   childFigure.visible = scaleToggle.checked;
+  persistControls();
 });
 // Bottom transition framing and curve joists hide once layer 1 is shown — it sits directly
 // over them, so seeing them "through" the skin is just visual clutter. Internal ribs stay
@@ -700,6 +780,7 @@ function updateSkinVisibility(): void {
   curveJoistGroup.visible = !showLayer1;
   skinGroup.visible = showLayer1;
   skinLayer2Group.visible = showLayer2;
+  persistControls();
 }
 skinLayer1Toggle.addEventListener("input", updateSkinVisibility);
 skinLayer2Toggle.addEventListener("input", updateSkinVisibility);
@@ -732,7 +813,9 @@ for (const tabButton of tabButtons) {
   });
 }
 
-applyDefaults();
+const persistedControls = loadPersistedControls();
+if (persistedControls) applyPersistedControls(persistedControls);
+else applyDefaults();
 updateHistoryButtons();
 
 function resize(): void {

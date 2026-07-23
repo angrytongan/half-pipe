@@ -1,9 +1,10 @@
 # half-pipe
 
 Browser app for planning skateboard half-pipe builds: adjust its parameters
-via sliders, and see the 3D shape. Standalone — no terrain, no persistence
+via sliders, and see the 3D shape. Standalone — no terrain, no backend
 (same posture as the sibling `../obstacle` project, deliberate: see
-[docs/decisions.md](docs/decisions.md)).
+[docs/decisions.md](docs/decisions.md)). Control values persist to
+localStorage across reloads (see [docs/status.md](docs/status.md)).
 
 ## Decisions
 

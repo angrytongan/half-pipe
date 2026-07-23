@@ -713,6 +713,35 @@ so "Reset to defaults" itself can be undone; the initial page-load render uses a
 `#redo-btn` pair sits at the very top of `#panel`, disabled via `HistoryStack`'s
 `canUndo`/`canRedo` whenever their respective stack is empty.
 
+## Persistence
+
+Every control's value persists to `localStorage` (key `half-pipe-controls`) across page loads —
+`currentParams`, `availableSpace`, and the four display toggles (dimensions/scale/skin layer 1/2
+visibility; the grain-direction select is part of `currentParams` already). Deliberately *not*
+persisted: undo/redo history itself (a fresh page load always starts with an empty undo stack,
+same as before), and camera/orbit-controls view state (position/target reset to
+`DEFAULT_CAMERA_POSITION`/`DEFAULT_CAMERA_TARGET` on every load, same as "Reset view").
+
+`persistControls()` (`src/main.ts`) writes one JSON blob covering all three groups. It's called
+from the end of `renderSpaceStatus` — which is itself called both directly (available-space
+sliders' own `onChange`) and from the end of every `rebuildRamp` (every other slider, plus
+undo/redo/reset, all of which end by calling `rebuildRamp`) — so that single call site covers
+every slider and every way a slider's value can change, without a second hook. The four toggles
+don't route through either of those (they just flip a `THREE.Group`'s `visible` directly), so
+each toggle's own `input` listener calls `persistControls()` itself.
+
+`loadPersistedControls()` reads that blob back at load time (before the first render), merged
+field-by-field over `HALF_PIPE_DEFAULTS`/today's `availableSpace`/each toggle's current `checked`
+state — not trusted outright — so a future slider being added or removed, or corrupted/foreign
+JSON in that key (wrapped in try/catch), falls back to that one field's default instead of
+crashing or leaving a slider's state `undefined`. Returns `null` if nothing's saved yet, in which
+case page load falls back to the original `applyDefaults()` path unchanged.
+`applyPersistedControls` is `applyDefaults`'s page-load counterpart: same slider-render/rebuild
+calls, but also sets each toggle's `checked` state and re-applies its own visibility effect
+(`dimensionsGroup.visible`, the scale figures, `updateSkinVisibility()`) — those effects normally
+only run from each toggle's own `input` listener, which a page load never fires — and skips
+recording an undo entry, since this is the starting state, not a change from one.
+
 ## Available space
 
 Split across two places in `index.html` so the warning can't be hidden by

@@ -3,8 +3,9 @@
 Browser app for planning skateboard half-pipe builds: tweak its
 parameters and see the 3D shape.
 
-Standalone: no terrain, no persistence — just one ramp at a time, with a
-3D view, per-part 2D shop drawings, and a bill of materials. See
+Standalone: no terrain, no backend — just one ramp at a time, with a
+3D view, per-part 2D shop drawings, and a bill of materials. Control
+values persist to localStorage across reloads. See
 [docs/status.md](docs/status.md) for what's built and
 [docs/features.md](docs/features.md) for what's next.
 
