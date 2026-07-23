@@ -9,8 +9,6 @@ export interface LinearDimension2D {
   labelPosition: Point;
 }
 
-const LABEL_NUDGE_FACTOR = 0.15; // fraction of offsetDistance, same "push past the dimension line" idea as dimensionLine.ts's fixed LABEL_NUDGE
-
 function add([ax, ay]: Point, [bx, by]: Point): Point {
   return [ax + bx, ay + by];
 }
@@ -34,6 +32,11 @@ function perpendicular([x, y]: Point): Point {
  * (as polygon points, since SVG has no built-in cone primitive) sized by arrowLength/arrowWidth —
  * explicit parameters rather than fixed constants, since each part drawing picks its own scale
  * (see drawings/renderPartDrawing.ts).
+ *
+ * startGap and labelGap are also caller-supplied rather than fractions of offsetDistance: a
+ * fraction of offsetDistance shrinks along with it, so a small detail dimension (e.g. a notch)
+ * would get a gap/label-clearance too thin to read even though the same font size is used
+ * everywhere in the drawing — see renderPartDrawing.ts for how these are actually sized.
  */
 export function buildLinearDimension2D(
   start: Point,
@@ -42,8 +45,11 @@ export function buildLinearDimension2D(
   offsetDistance: number,
   arrowLength: number,
   arrowWidth: number,
+  startGap: number,
+  labelGap: number,
 ): LinearDimension2D {
-  const offset = scale(normalize(offsetDir), offsetDistance);
+  const offsetUnit = normalize(offsetDir);
+  const offset = scale(offsetUnit, offsetDistance);
   const offsetStart = add(start, offset);
   const offsetEnd = add(end, offset);
   const dirVec = normalize(sub(offsetEnd, offsetStart));
@@ -54,11 +60,13 @@ export function buildLinearDimension2D(
     return [tip, add(base, scale(perp, arrowWidth / 2)), add(base, scale(perp, -arrowWidth / 2))];
   };
 
-  const labelPosition = add(scale(add(offsetStart, offsetEnd), 0.5), scale(normalize(offset), offsetDistance * LABEL_NUDGE_FACTOR));
+  const labelPosition = add(scale(add(offsetStart, offsetEnd), 0.5), scale(offsetUnit, labelGap));
 
   return {
-    extensionLineA: [start, offsetStart],
-    extensionLineB: [end, offsetEnd],
+    // Starts startGap away from the part's own measured point, not at it — an extension line
+    // touching the part it measures reads as part of the part's own geometry.
+    extensionLineA: [add(start, scale(offsetUnit, startGap)), offsetStart],
+    extensionLineB: [add(end, scale(offsetUnit, startGap)), offsetEnd],
     dimensionLine: [offsetStart, offsetEnd],
     arrowA: arrowAt(offsetStart, dirVec),
     arrowB: arrowAt(offsetEnd, scale(dirVec, -1)),

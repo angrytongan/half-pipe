@@ -39,9 +39,10 @@ function formatMm(valueMm: number): string {
 const OFFSET_FACTOR = 0.12;
 
 // The non-dimension label stack sits below the outline's own bottom edge, past the bottom
-// dimension line's own offset (another full OFFSET_FACTOR gap beyond it) — clear of both the
-// part being dimensioned and that dimension line itself, along the bottom of the card.
-const LABEL_OFFSET_FACTOR = OFFSET_FACTOR * 2;
+// dimension line's own offset (another two full OFFSET_FACTOR gaps beyond it) — clear of both
+// the part being dimensioned and that dimension line's own label, which (see renderPartDrawing.ts)
+// sits some way past the line itself.
+const LABEL_OFFSET_FACTOR = OFFSET_FACTOR * 3;
 
 /**
  * One box-shaped part, drawn as a length × height rectangle (its own face/elevation view) with

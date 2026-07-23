@@ -8,6 +8,7 @@ const ARROW_WIDTH_FACTOR = 0.5; // fraction of arrow length
 const FONT_SIZE_FACTOR = 0.045; // fraction of the drawing's own bounding diagonal
 const LINE_HEIGHT_FACTOR = 1.4; // fraction of fontSize — keeps stacked label lines from overlapping regardless of a part's own scale
 const CHAR_WIDTH_FACTOR = 0.55; // rough average glyph width, as a fraction of fontSize — just enough to keep long label lines from clipping the viewBox
+const LABEL_GAP_MARGIN_FACTOR = 0.3; // fraction of fontSize, added on top of the label's own half-width/half-height clearance so text doesn't just barely graze the dimension line
 
 function num(n: number): string {
   return n.toFixed(2);
@@ -72,7 +73,19 @@ export function renderPartDrawing(part: PartDrawing): SVGSVGElement {
 
   const dimensionMarkup = part.dimensions
     .map((dim) => {
-      const d = buildLinearDimension2D(dim.start, dim.end, dim.offsetDir, dim.offsetDistance, arrowLength, arrowWidth);
+      // The label sits perpendicular to its dimension line (offsetDir is always perpendicular
+      // to start->end, by every spec in halfPipePartDrawings.ts), so a vertical offset means a
+      // horizontal line — the label only needs to clear it vertically (half the line height) —
+      // and a horizontal offset means a vertical line, needing horizontal (half text width)
+      // clearance instead. Picking whichever actually applies (not the max of both) matters:
+      // over-clearing a horizontal dimension's long text label pushes it down further than
+      // necessary, eating into other content anchored a fixed distance further down (e.g. the
+      // part-note text stack — see LABEL_OFFSET_FACTOR in halfPipePartDrawings.ts).
+      const halfLabelWidth = (dim.text.length * fontSize * CHAR_WIDTH_FACTOR) / 2;
+      const isVerticalOffset = Math.abs(dim.offsetDir[1]) >= Math.abs(dim.offsetDir[0]);
+      const clearance = isVerticalOffset ? lineHeight / 2 : halfLabelWidth;
+      const labelGap = clearance + fontSize * LABEL_GAP_MARGIN_FACTOR;
+      const d = buildLinearDimension2D(dim.start, dim.end, dim.offsetDir, dim.offsetDistance, arrowLength, arrowWidth, arrowLength, labelGap);
       return [
         line(...d.extensionLineA, "dim-extension"),
         line(...d.extensionLineB, "dim-extension"),

@@ -445,7 +445,20 @@ separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Lin
   `ArrowHelper`. `arrowLength`/`arrowWidth` are explicit parameters rather than fixed constants
   (unlike `dimensionLine.ts`'s `ARROW_LENGTH`/`ARROW_WIDTH`) since parts here span wildly
   different scales — a ~2m rib profile and a 45×90mm joist cross-section can't share one fixed
-  arrow size and still look right.
+  arrow size and still look right. `startGap` (extension lines begin that far from the part
+  they measure, rather than touching it) and `labelGap` (how far the label sits past the
+  dimension line) are caller-supplied for the same reason `dimensionLine.ts`'s fixed
+  `LABEL_NUDGE` doesn't work here: a fraction of *that dimension's own* `offsetDistance` shrinks
+  right along with it, so the rib's small detail dimensions (notch wall/shelf, base edge — see
+  `detailOffsetDistance` below) would get a label nudge too thin to clear the same font size
+  used everywhere else in the drawing. `renderPartDrawing.ts` sizes both from the drawing's own
+  fontSize/lineHeight (and, for `labelGap`, that specific label's own text length) instead, so
+  they hold up regardless of how small an individual dimension's offset is. `labelGap` only
+  clears whichever direction its label actually needs — half the line height for a dimension
+  whose offset is vertical (so the line itself is horizontal), half the label's own text width
+  for a horizontal offset (vertical line) — rather than always taking the max of both: over
+  clearing a long label on a horizontal dimension pushed it down further than necessary, eating
+  into the part-note text stack anchored a fixed distance below (see `LABEL_OFFSET_FACTOR`).
 - **`halfPipePartDrawings.ts`** builds each part's outline + dimensions + text labels (all in
   mm, converted from `HalfPipeParams`' own mix of m/mm fields) as plain data, no rendering:
   - **Rib** — traces `ribLocalProfilePoints` (extracted from `halfPipe.ts`'s `halfPipeOutline`,
