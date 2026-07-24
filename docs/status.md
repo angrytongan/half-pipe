@@ -783,6 +783,12 @@ workflow. `vite.config.ts`'s `base` is `/half-pipe/` when `GITHUB_ACTIONS` is se
 repo's GitHub Pages project-page path) and `/` otherwise, so local `dev`/`preview` stay at the
 root.
 
+`actions/checkout`, `actions/setup-node`, `actions/upload-pages-artifact`, and
+`actions/deploy-pages` are all pinned at `v5` — the major version each project moved to the
+Node 24 action runtime, ahead of GitHub's Node 20 runtime deprecation. `setup-node`'s own
+`node-version` (what builds the app, separate from what runs the actions themselves) is `24`
+too, since Node 20 itself reached end-of-life.
+
 ## Printing
 
 No print button or PDF export — this is the browser's native print (Cmd/Ctrl+P), styled by
