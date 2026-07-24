@@ -769,6 +769,12 @@ exactly (`PlaneGeometry(availableSpace.length, availableSpace.width)`), rebuilt 
 sliders, undo/redo, initial load) already calls — so the grass rectangle visually shows the
 space constraint the status pills describe numerically.
 
+## Analytics
+
+Google Analytics (GA4, measurement ID `G-CNWV7CK46M`) — the standard `gtag.js` snippet in
+`index.html`'s `<head>`, loading unconditionally on every page load. No consent gating, no
+route-change tracking beyond the default pageview (single-page app, nothing else to wire up).
+
 ## Deployment
 
 `.github/workflows/deploy.yml` builds and publishes `dist/` to GitHub Pages on every push to
