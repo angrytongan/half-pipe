@@ -191,12 +191,4 @@ describe("ribPartDrawing", () => {
     expect(labelText).toContain(`${HALF_PIPE_DEFAULTS.transitionAngleDeg}°`);
     expect(labelText).toContain(`Deck length: ${Math.round(HALF_PIPE_DEFAULTS.deckLength * 1000)}mm`);
   });
-
-  it("omits the vert-height label when there's no vert extension, and includes it when there is", () => {
-    const flat = ribPartDrawing(HALF_PIPE_DEFAULTS);
-    expect(flat.labels.lines.join(" ")).not.toContain("Vert height");
-
-    const withVert = ribPartDrawing({ ...HALF_PIPE_DEFAULTS, vertHeight: 0.3 });
-    expect(withVert.labels.lines.join(" ")).toContain("Vert height: 300mm");
-  });
 });

@@ -29,13 +29,13 @@ describe("transitionExitDirection", () => {
 });
 
 describe("transitionAndDeckPoints", () => {
-  it("extends the vert wall then the deck from the arc's top", () => {
-    const points = transitionAndDeckPoints(2, 90, 0.5, 0.6);
+  it("extends the deck from the arc's top", () => {
+    const points = transitionAndDeckPoints(2, 90, 0.6);
     const [deckStartX, deckStartY] = points[points.length - 2];
     const [deckEndX, deckEndY] = points[points.length - 1];
 
-    expect(deckStartX).toBeCloseTo(2); // archX unaffected — vert extension is purely vertical here
-    expect(deckStartY).toBeCloseTo(2.5); // archY (2) + vertHeight (0.5)
+    expect(deckStartX).toBeCloseTo(2); // archX
+    expect(deckStartY).toBeCloseTo(2); // archY
     expect(deckEndX).toBeCloseTo(deckStartX + 0.6);
     expect(deckEndY).toBeCloseTo(deckStartY);
   });

@@ -80,8 +80,8 @@ function rectanglePartDrawing(title: string, lengthMm: number, heightMm: number,
  * coping notch's own wall/shelf cuts each get a CAD-style dimension line, anchored to the exact
  * vertices `ribLocalProfilePoints` produces — see that function's own doc comment for the point
  * order this indexes into. An angular dimension for the transition arc isn't built anywhere in
- * this codebase yet (see docs/features.md), so radius/angle/vert height/deck length are called
- * out as text labels instead of hand-dimensioning the curve itself.
+ * this codebase yet (see docs/features.md), so radius/angle/deck length are called out as text
+ * labels instead of hand-dimensioning the curve itself.
  *
  * Offset directions for the notch and base-edge dimensions aren't guessed — they're derived
  * from this outline's own (consistent, parameter-independent) winding: walking the boundary in
@@ -114,7 +114,6 @@ export function ribPartDrawing(params: HalfPipeParams): PartDrawing {
   const lines = [
     `Thickness: ${formatMm(params.ribThicknessMm)}`,
     `Radius: ${formatMm(params.radius * 1000)}, angle: ${params.transitionAngleDeg}°`,
-    ...(params.vertHeight > 0 ? [`Vert height: ${formatMm(params.vertHeight * 1000)}`] : []),
     `Deck length: ${formatMm(params.deckLength * 1000)}`,
   ];
 

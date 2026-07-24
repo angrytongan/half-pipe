@@ -22,27 +22,24 @@ export function transitionArcPoints(
   return points;
 }
 
-/** Tangent direction at the top of a transitionArcPoints curve — where a vert extension or deck continues from. */
+/** Tangent direction at the top of a transitionArcPoints curve — where the deck continues from. */
 export function transitionExitDirection(sweepAngleDeg: number): [number, number] {
   const sweep = THREE.MathUtils.degToRad(sweepAngleDeg);
   return [Math.cos(sweep), Math.sin(sweep)];
 }
 
 /**
- * Transition arc + optional vertical extension + optional flat deck, from the
- * ground-tangent start (0,0) out to the deck's outer edge — the shared shape of
- * a deck attachment, used by both of a half-pipe's mirrored transitions.
+ * Transition arc + flat deck, from the ground-tangent start (0,0) out to the
+ * deck's outer edge — the shared shape of a deck attachment, used by both of
+ * a half-pipe's mirrored transitions.
  */
 export function transitionAndDeckPoints(
   radius: number,
   transitionAngleDeg: number,
-  vertHeight: number,
   deckLength: number,
 ): [number, number][] {
   const arc = transitionArcPoints(radius, transitionAngleDeg);
-  const [archX, archY] = arc[arc.length - 1];
-  const [dirX, dirY] = transitionExitDirection(transitionAngleDeg);
-  const deckStart: [number, number] = [archX + dirX * vertHeight, archY + dirY * vertHeight];
+  const deckStart = arc[arc.length - 1];
   const deckEnd: [number, number] = [deckStart[0] + deckLength, deckStart[1]];
   return [...arc, deckStart, deckEnd];
 }

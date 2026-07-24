@@ -4,7 +4,7 @@ import { transitionAndDeckPoints } from "./transition";
 
 describe("copingNotch", () => {
   const radius = 1.8;
-  const points = transitionAndDeckPoints(radius, 57, 0, 0.3);
+  const points = transitionAndDeckPoints(radius, 57, 0.3);
   const [cornerX, cornerY] = points[points.length - 2];
   const pipeRadius = 0.0301; // ~60.3mm OD / 2 in meters
   const h = 0.0032;

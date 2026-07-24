@@ -475,8 +475,8 @@ separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Lin
     top run (outer edge to the notch's wall — same length as `deckBoardLength`, not the raw
     `deckLength` param, since the notch cuts into it), the small base edge between the ground
     and the curve's own start (at `joistDepthMm`), and the notch's own wall/shelf cuts.
-    Radius, transition angle, vert height (when present), and the raw `deckLength` param are
-    text labels instead — an angular-dimension variant isn't built anywhere yet (see
+    Radius, transition angle, and the raw `deckLength` param are text labels instead — an
+    angular-dimension variant isn't built anywhere yet (see
     features.md), so hand-dimensioning the curve itself would be new scope, not reuse. Rib
     thickness (the extrusion depth, not drawable in a flat profile view) is a text label too.
   - **Deck board** — a length (`deckBoardLength`, also extracted from `halfPipe.ts`'s
