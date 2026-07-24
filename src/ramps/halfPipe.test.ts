@@ -35,7 +35,7 @@ describe("buildHalfPipeGeometry", () => {
     expect(box.min.y).toBeCloseTo(0, 5);
   });
 
-  it("reaches the transition radius plus joistDepth as its height at a 90 degree sweep with no vert extension", () => {
+  it("reaches the transition radius plus joistDepth as its height at a 90 degree sweep", () => {
     const params = { ...HALF_PIPE_DEFAULTS, transitionAngleDeg: 90 };
     const geometry = buildHalfPipeGeometry(params);
     geometry.computeBoundingBox();
@@ -187,7 +187,7 @@ describe("buildHalfPipeRibs coping notch", () => {
     const params = HALF_PIPE_DEFAULTS;
     const jointDepth = params.joistDepthMm / 1000;
     const half = params.bottomTransitionLength / 2;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -356,7 +356,7 @@ describe("buildHalfPipeJoists", () => {
     const depth = params.joistDepthMm / 1000;
     const jointDepth = params.joistDepthMm / 1000;
 
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -407,7 +407,7 @@ describe("buildHalfPipeJoists", () => {
     const jointDepth = params.joistDepthMm / 1000;
     const half = params.bottomTransitionLength / 2;
 
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -459,7 +459,7 @@ describe("buildHalfPipeJoists", () => {
     const jointDepth = params.joistDepthMm / 1000;
     const half = params.bottomTransitionLength / 2;
 
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -505,7 +505,7 @@ describe("buildHalfPipeJoists", () => {
     const jointDepth = params.joistDepthMm / 1000;
     const half = params.bottomTransitionLength / 2;
 
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -537,7 +537,7 @@ describe("buildHalfPipeJoists", () => {
     const jointDepth = params.joistDepthMm / 1000;
     const sweep = (params.transitionAngleDeg * Math.PI) / 180;
     const half = params.bottomTransitionLength / 2;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const [deckStartX, deckStartY] = points[points.length - 2];
     const deckStartWorldX = half + deckStartX;
     const deckStartWorldY = deckStartY + jointDepth;
@@ -558,7 +558,7 @@ describe("buildHalfPipeJoists", () => {
   it("insets the deck-outer joist so its external face aligns with the rib's own edge, not centered on it", () => {
     const params = HALF_PIPE_DEFAULTS;
     const half = params.bottomTransitionLength / 2;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const [deckOuterX, deckOuterY] = points[points.length - 1];
     const jointDepth = params.joistDepthMm / 1000;
     const deckOuterWorldY = deckOuterY + jointDepth;
@@ -583,7 +583,7 @@ describe("buildHalfPipeJoists", () => {
     const params = HALF_PIPE_DEFAULTS;
     const half = params.bottomTransitionLength / 2;
     const jointDepth = params.joistDepthMm / 1000;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const [deckOuterX] = points[points.length - 1];
     const deckOuterWorldXRight = half + deckOuterX; // where the rib's outline actually ends
 
@@ -609,7 +609,7 @@ describe("buildHalfPipeJoists", () => {
     const params = HALF_PIPE_DEFAULTS;
     const half = params.bottomTransitionLength / 2;
     const jointDepth = params.joistDepthMm / 1000;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const [deckOuterX] = points[points.length - 1];
     // Bottom-corner joist's centerline (local x=0, uninset) and deck-outer-ground joist's
     // centerline (local x=deckOuterX, uninset — the inset shifts its box, not its own anchor).
@@ -668,7 +668,7 @@ describe("buildHalfPipeJoistsBySection", () => {
     const jointDepth = params.joistDepthMm / 1000;
     const half = params.bottomTransitionLength / 2;
 
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -718,7 +718,7 @@ describe("buildHalfPipeDeck", () => {
   it("runs in X from the notch's vertical wall to the rib's own outer edge, on both sides", () => {
     const params = HALF_PIPE_DEFAULTS;
     const half = params.bottomTransitionLength / 2;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const deckOuter = points[points.length - 1];
     const notch = copingNotch(
       points,
@@ -750,7 +750,7 @@ describe("buildHalfPipeDeck", () => {
   it("sits on top of the deck joists: bottom flush with their top face, extending upward by ribThicknessMm", () => {
     const params = { ...HALF_PIPE_DEFAULTS, ribThicknessMm: 25 };
     const jointDepth = params.joistDepthMm / 1000;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const deckOuter = points[points.length - 1];
     const deckJoistTopY = deckOuter[1] + jointDepth;
 
@@ -765,7 +765,7 @@ describe("buildHalfPipeDeck", () => {
 
 describe("buildHalfPipeSkinLayer1", () => {
   const notchOf = (params: HalfPipeParams) => {
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     return copingNotch(
       points,
       params.radius,
@@ -941,7 +941,7 @@ describe("halfPipeSkinLayer1FlatSheetSizes", () => {
 
 describe("buildHalfPipeSkinLayer2", () => {
   const notchOf = (params: HalfPipeParams) => {
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     return copingNotch(
       points,
       params.radius,
@@ -1130,7 +1130,7 @@ describe("halfPipeSkinLayer2NarrowStarterCount", () => {
 describe("copingTouchExtension usage sanity", () => {
   it("gives a genuinely different result for the outer vs inner edge radius, even though buildHalfPipeSkinLayer2 only uses the inner one (squared cut, see skin.ts)", () => {
     const params = HALF_PIPE_DEFAULTS;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,
@@ -1201,7 +1201,7 @@ describe("halfPipeCopingCenters", () => {
 
     const half = params.bottomTransitionLength / 2;
     const jointDepth = params.joistDepthMm / 1000;
-    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.vertHeight, params.deckLength);
+    const points = transitionAndDeckPoints(params.radius, params.transitionAngleDeg, params.deckLength);
     const notch = copingNotch(
       points,
       params.radius,

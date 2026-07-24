@@ -103,7 +103,6 @@ const RAMP: RampSpec = {
   rampSliders: [
     { key: "radius", label: "Transition radius (m)", min: 1, max: 4, step: 0.1 },
     { key: "transitionAngleDeg", label: "Transition angle (°)", min: 45, max: 90, step: 1 },
-    { key: "vertHeight", label: "Vert extension (m)", min: 0, max: 1, step: 0.05 },
     { key: "deckLength", label: "Deck length (m)", min: 0.3, max: 1.5, step: 0.1 },
     { key: "width", label: "Width (m)", min: 1, max: 4, step: 0.1 },
   ],

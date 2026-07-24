@@ -19,7 +19,6 @@ export type SkinGrainDirection = "length-ways" | "width-ways";
 export interface HalfPipeParams {
   radius: number;
   transitionAngleDeg: number;
-  vertHeight: number;
   deckLength: number;
   bottomTransitionLength: number;
   width: number;
@@ -45,7 +44,6 @@ export interface HalfPipeParams {
 export const HALF_PIPE_DEFAULTS: HalfPipeParams = {
   radius: 1.8,
   transitionAngleDeg: 57,
-  vertHeight: 0,
   deckLength: 0.6,
   bottomTransitionLength: 2.4,
   width: 2.4,
@@ -85,7 +83,6 @@ export function ribLocalProfilePoints(params: HalfPipeParams): [number, number][
   const {
     radius,
     transitionAngleDeg,
-    vertHeight,
     deckLength,
     ribThicknessMm,
     joistDepthMm,
@@ -98,7 +95,7 @@ export function ribLocalProfilePoints(params: HalfPipeParams): [number, number][
   } = params;
   const jointDepth = joistDepthMm / 1000;
   const joistThickness = joistThicknessMm / 1000;
-  const rawPoints = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const rawPoints = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const notch = copingNotch(
     rawPoints,
     radius,
@@ -254,7 +251,6 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
   const {
     radius,
     transitionAngleDeg,
-    vertHeight,
     deckLength,
     ribThicknessMm,
     joistThicknessMm,
@@ -266,7 +262,7 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
     skinLayer2ThicknessMm,
   } = params;
   const thickness = joistThicknessMm / 1000;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const notch = copingNotch(
     points,
     radius,
@@ -349,7 +345,6 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
   const {
     radius,
     transitionAngleDeg,
-    vertHeight,
     deckLength,
     bottomTransitionLength,
     width,
@@ -369,7 +364,7 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
   const thickness = joistThicknessMm / 1000;
   const depth = joistDepthMm / 1000;
 
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const deckOuter = points[points.length - 1];
   const notch = copingNotch(
     points,
@@ -479,9 +474,9 @@ export function buildHalfPipeJoistsBySection(params: HalfPipeParams): { curveJoi
  * drawings/halfPipePartDrawings.ts) use the same length `buildHalfPipeDeck` actually builds to.
  */
 export function deckBoardLength(params: HalfPipeParams): number {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm } =
+  const { radius, transitionAngleDeg, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm } =
     params;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const deckOuter = points[points.length - 1];
   const notch = copingNotch(
     points,
@@ -497,13 +492,13 @@ export function deckBoardLength(params: HalfPipeParams): number {
 }
 
 export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[] {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, ribThicknessMm, joistDepthMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm } =
+  const { radius, transitionAngleDeg, deckLength, bottomTransitionLength, width, ribThicknessMm, joistDepthMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm } =
     params;
   const half = bottomTransitionLength / 2;
   const jointDepth = joistDepthMm / 1000;
   const ribThickness = ribThicknessMm / 1000;
 
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const deckOuter = points[points.length - 1];
   const notch = copingNotch(
     points,
@@ -555,8 +550,8 @@ export function buildHalfPipeDeck(params: HalfPipeParams): THREE.BufferGeometry[
  */
 /** Layer 1's curve rows (see curveSheetRows) — factored out so buildHalfPipeSkinLayer1 and halfPipeSkinLayer1FlatSheetSizes (below) share one computation instead of each re-deriving the notch/sweep it depends on. */
 function layer1CurveRows(params: HalfPipeParams): { t0: number; t1: number; flatExtension: number }[] {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinSheetWidth } = params;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const { radius, transitionAngleDeg, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinSheetWidth } = params;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const notch = copingNotch(
     points,
     radius,
@@ -695,8 +690,8 @@ export function halfPipeSkinLayer1FlatSheetSizes(params: HalfPipeParams): SkinFl
  */
 /** Layer 2's curve rows and coping notch together — factored out so buildHalfPipeSkinLayer2 and halfPipeSkinLayer2FlatSheetSizes (below) share one computation instead of each re-deriving it; buildHalfPipeSkinLayer2 needs the notch itself too (for pipeTouch), not just the rows layer 1's equivalent helper stops at. */
 function layer2CurveRowsAndNotch(params: HalfPipeParams): { rows: { t0: number; t1: number; flatExtension: number }[]; notch: ReturnType<typeof copingNotch> } {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinLayer2SheetWidth } = params;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const { radius, transitionAngleDeg, deckLength, ribThicknessMm, copingOdMm, copingHorizontalProtrusionMm, copingVerticalProtrusionMm, skinLayer1ThicknessMm, skinLayer2ThicknessMm, skinLayer2SheetWidth } = params;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const notch = copingNotch(
     points,
     radius,
@@ -796,7 +791,6 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
   const {
     radius,
     transitionAngleDeg,
-    vertHeight,
     deckLength,
     bottomTransitionLength,
     ribThicknessMm,
@@ -809,7 +803,7 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
   } = params;
   const half = bottomTransitionLength / 2;
   const jointDepth = joistDepthMm / 1000;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const notch = copingNotch(
     points,
     radius,
@@ -838,8 +832,8 @@ export function halfPipeCopingCenters(params: HalfPipeParams): { x: number; y: n
  * overhang past it.
  */
 export function halfPipeFootprint(params: HalfPipeParams): { length: number; width: number; height: number } {
-  const { radius, transitionAngleDeg, vertHeight, deckLength, bottomTransitionLength, width, joistDepthMm } = params;
-  const points = transitionAndDeckPoints(radius, transitionAngleDeg, vertHeight, deckLength);
+  const { radius, transitionAngleDeg, deckLength, bottomTransitionLength, width, joistDepthMm } = params;
+  const points = transitionAndDeckPoints(radius, transitionAngleDeg, deckLength);
   const [deckOuterX, deckOuterY] = points[points.length - 1];
   return {
     length: bottomTransitionLength + 2 * deckOuterX,
