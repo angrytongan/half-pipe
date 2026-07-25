@@ -11,6 +11,7 @@ import {
   buildHalfPipeSkinLayer1,
   buildHalfPipeSkinLayer2,
   curveInteriorJoistLocalPoints,
+  curveJoistSpacingMeters,
   halfPipeCopingCenters,
   halfPipeFootprint,
   halfPipeSkinLayer1FlatSheetSizes,
@@ -1188,6 +1189,35 @@ describe("curveInteriorJoistLocalPoints", () => {
 
   it("returns an empty array when internalCurveJoistCount is 0", () => {
     expect(curveInteriorJoistLocalPoints({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 })).toEqual([]);
+  });
+});
+
+describe("curveJoistSpacingMeters", () => {
+  it("measures the chord distance between the first two interior curve joists' true centers, not their top-face anchor points", () => {
+    const depth = HALF_PIPE_DEFAULTS.joistDepthMm / 1000;
+    const curveJoists = curveInteriorJoistLocalPoints(HALF_PIPE_DEFAULTS);
+    const [x0, y0] = curveJoists[0].point;
+    const [x1, y1] = curveJoists[1].point;
+    const anchorDistance = Math.hypot(x1 - x0, y1 - y0);
+
+    const centerX0 = x0 + Math.sin(curveJoists[0].angle) * (depth / 2);
+    const centerY0 = y0 - Math.cos(curveJoists[0].angle) * (depth / 2);
+    const centerX1 = x1 + Math.sin(curveJoists[1].angle) * (depth / 2);
+    const centerY1 = y1 - Math.cos(curveJoists[1].angle) * (depth / 2);
+    const centerDistance = Math.hypot(centerX1 - centerX0, centerY1 - centerY0);
+
+    expect(curveJoistSpacingMeters(HALF_PIPE_DEFAULTS)).toBeCloseTo(centerDistance, 9);
+    // The two joists' anchors sit at slightly different tangent angles (they're on a curve), so
+    // offsetting each one back to its own center moves the two points by different amounts —
+    // the resulting distance isn't identical to the raw anchor-to-anchor distance. This is what
+    // distinguishes "center-to-center" from the top-face anchor points curveInteriorJoistLocalPoints
+    // itself returns.
+    expect(curveJoistSpacingMeters(HALF_PIPE_DEFAULTS)).not.toBeCloseTo(anchorDistance, 9);
+  });
+
+  it("returns undefined when there are fewer than two interior curve joists to measure", () => {
+    expect(curveJoistSpacingMeters({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 1 })).toBeUndefined();
+    expect(curveJoistSpacingMeters({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 0 })).toBeUndefined();
   });
 });
 

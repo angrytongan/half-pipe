@@ -12,7 +12,7 @@ import {
   skinLayer2NarrowCurveSheetPartDrawing,
   skinLayer2SheetPartDrawing,
 } from "./halfPipePartDrawings";
-import { bottomTransitionMemberLengths, deckBoardLength, HALF_PIPE_DEFAULTS, halfPipeSkinLayer1FlatSheetSizes, halfPipeSkinLayer2FlatSheetSizes, ribLocalProfilePoints } from "../ramps/halfPipe";
+import { bottomTransitionMemberLengths, curveJoistSpacingMeters, deckBoardLength, HALF_PIPE_DEFAULTS, halfPipeSkinLayer1FlatSheetSizes, halfPipeSkinLayer2FlatSheetSizes, ribLocalProfilePoints } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 
 function outlineBounds(outline: [number, number][]) {
@@ -190,5 +190,16 @@ describe("ribPartDrawing", () => {
     expect(labelText).toContain(`Radius: ${Math.round(HALF_PIPE_DEFAULTS.radius * 1000)}mm`);
     expect(labelText).toContain(`${HALF_PIPE_DEFAULTS.transitionAngleDeg}°`);
     expect(labelText).toContain(`Deck length: ${Math.round(HALF_PIPE_DEFAULTS.deckLength * 1000)}mm`);
+  });
+
+  it("labels curve joist spacing (center-to-center) as text, matching curveJoistSpacingMeters", () => {
+    const drawing = ribPartDrawing(HALF_PIPE_DEFAULTS);
+    const spacingMm = Math.round(curveJoistSpacingMeters(HALF_PIPE_DEFAULTS)! * 1000);
+    expect(drawing.labels.lines).toContain(`Curve joist spacing (center-to-center): ${spacingMm}mm`);
+  });
+
+  it("omits the curve joist spacing label when there are fewer than two interior curve joists to measure", () => {
+    const drawing = ribPartDrawing({ ...HALF_PIPE_DEFAULTS, internalCurveJoistCount: 1 });
+    expect(drawing.labels.lines.some((line) => line.startsWith("Curve joist spacing"))).toBe(false);
   });
 });

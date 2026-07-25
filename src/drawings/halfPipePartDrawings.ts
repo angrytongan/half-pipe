@@ -1,4 +1,4 @@
-import { bottomTransitionMemberLengths, deckBoardLength, halfPipeSkinLayer1FlatSheetSizes, halfPipeSkinLayer2FlatSheetSizes, ribLocalProfilePoints, type HalfPipeParams } from "../ramps/halfPipe";
+import { bottomTransitionMemberLengths, curveJoistSpacingMeters, deckBoardLength, halfPipeSkinLayer1FlatSheetSizes, halfPipeSkinLayer2FlatSheetSizes, ribLocalProfilePoints, type HalfPipeParams } from "../ramps/halfPipe";
 import { ribZPositions } from "../ramps/ribs";
 import type { Point } from "./svgDimension";
 
@@ -80,8 +80,11 @@ function rectanglePartDrawing(title: string, lengthMm: number, heightMm: number,
  * coping notch's own wall/shelf cuts each get a CAD-style dimension line, anchored to the exact
  * vertices `ribLocalProfilePoints` produces — see that function's own doc comment for the point
  * order this indexes into. An angular dimension for the transition arc isn't built anywhere in
- * this codebase yet (see docs/features.md), so radius/angle/deck length are called out as text
- * labels instead of hand-dimensioning the curve itself.
+ * this codebase yet (see docs/features.md), so radius/angle/deck length/curve joist spacing are
+ * called out as text labels instead of hand-dimensioning the curve itself — the same reason the
+ * curve-joist spacing (see halfPipe.ts's curveJoistSpacingMeters) is a label here rather than a
+ * drawn dimension line the way the notch/base-edge cuts are, unlike its 3D-view counterpart
+ * (halfPipeDimensions.ts), which can place a real line in free 3D space.
  *
  * Offset directions for the notch and base-edge dimensions aren't guessed — they're derived
  * from this outline's own (consistent, parameter-independent) winding: walking the boundary in
@@ -111,10 +114,12 @@ export function ribPartDrawing(params: HalfPipeParams): PartDrawing {
   const curveStart = points[points.length - 2]; // [baseX, jointDepth] — where the flat base meets the curve
   const groundAtBase = points[points.length - 1]; // [baseX, 0]
 
+  const curveJoistSpacing = curveJoistSpacingMeters(params);
   const lines = [
     `Thickness: ${formatMm(params.ribThicknessMm)}`,
     `Radius: ${formatMm(params.radius * 1000)}, angle: ${params.transitionAngleDeg}°`,
     `Deck length: ${formatMm(params.deckLength * 1000)}`,
+    ...(curveJoistSpacing === undefined ? [] : [`Curve joist spacing (center-to-center): ${formatMm(curveJoistSpacing * 1000)}`]),
   ];
 
   return {
