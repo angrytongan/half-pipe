@@ -1,5 +1,6 @@
 import * as THREE from "three";
-import { curveInteriorJoistLocalPoints, halfPipeFootprint, type HalfPipeParams } from "../ramps/halfPipe";
+import { curveInteriorJoistLocalPoints, curveJoistSpacingMeters, halfPipeFootprint, type HalfPipeParams } from "../ramps/halfPipe";
+import { joistCenter } from "../ramps/joists";
 import { ribZPositions } from "../ramps/ribs";
 import { buildLinearDimension, type LinearDimension } from "./dimensionLine";
 
@@ -103,14 +104,18 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
     { ...ribWidthDim, text: formatMeters(Math.abs(-halfLength - ribBaseX)) },
   ];
 
-  // Distance between the midpoints of two adjacent curve joists — every curve gap is congruent
+  // Distance between the centers of two adjacent curve joists — every curve gap is congruent
   // (equal angular steps on a circular arc, see curveInteriorJoistLocalPoints), so only the
   // first pair is dimensioned, same "one representative gap" convention spacingDim/ribWidthDim
   // use. Needs two interior joists to exist; omitted below internalCurveJoistCount 2.
   const curveJoists = curveInteriorJoistLocalPoints(params);
   if (curveJoists.length >= 2) {
-    const [x0, y0] = curveJoists[0].point;
-    const [x1, y1] = curveJoists[1].point;
+    // curveInteriorJoistLocalPoints' own points anchor each joist's *top* face, not its center
+    // (see joists.ts) — translated back to the true centerline via joistCenter first, so this
+    // dimension measures actual timber center-to-center, not the cut line.
+    const joistDepth = joistDepthMm / 1000;
+    const [x0, y0] = joistCenter(curveJoists[0].point[0], curveJoists[0].point[1], joistDepth, curveJoists[0].angle);
+    const [x1, y1] = joistCenter(curveJoists[1].point[0], curveJoists[1].point[1], joistDepth, curveJoists[1].angle);
     // Drawn at the opposite edge (-Z) from bottomTransitionDim/ribWidthDim (+Z), offset further
     // outward past the ramp — same "push past the structure" convention widthDim uses.
     const curveJoistSpacingDim = buildLinearDimension(
@@ -119,7 +124,7 @@ export function buildHalfPipeDimensions(params: HalfPipeParams): HalfPipeDimensi
       new THREE.Vector3(0, 0, -1),
       OFFSET_DISTANCE,
     );
-    dims.push({ ...curveJoistSpacingDim, text: formatMeters(Math.hypot(x1 - x0, y1 - y0)) });
+    dims.push({ ...curveJoistSpacingDim, text: formatMeters(curveJoistSpacingMeters(params)!) });
   }
 
   return dims;

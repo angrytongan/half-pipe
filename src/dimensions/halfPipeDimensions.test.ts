@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildHalfPipeDimensions } from "./halfPipeDimensions";
-import { curveInteriorJoistLocalPoints, HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
+import { curveInteriorJoistLocalPoints, curveJoistSpacingMeters, HALF_PIPE_DEFAULTS } from "../ramps/halfPipe";
+import { joistCenter } from "../ramps/joists";
 import { ribZPositions } from "../ramps/ribs";
 
 describe("buildHalfPipeDimensions", () => {
@@ -121,14 +122,27 @@ describe("buildHalfPipeDimensions", () => {
     expect(ribWidthDim.labelPosition.z).toBeCloseTo(halfWidth + 0.4 + 0.08, 2);
   });
 
-  it("measures the curve-joist spacing as the chord distance between the first two interior curve joists' own anchor points", () => {
+  it("measures the curve-joist spacing as the chord distance between the first two interior curve joists' true centers, not their top-face anchor points", () => {
     const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
-    const curveJoists = curveInteriorJoistLocalPoints(HALF_PIPE_DEFAULTS);
-    const [x0, y0] = curveJoists[0].point;
-    const [x1, y1] = curveJoists[1].point;
-    const expected = Math.hypot(x1 - x0, y1 - y0);
+    expect(dims[6].text).toBe(`${curveJoistSpacingMeters(HALF_PIPE_DEFAULTS)!.toFixed(2)}m`);
+  });
 
-    expect(dims[6].text).toBe(`${expected.toFixed(2)}m`);
+  it("places the curve-joist spacing dimension's label at the joists' true centers, not their top-face anchor points", () => {
+    const dims = buildHalfPipeDimensions(HALF_PIPE_DEFAULTS);
+    const curveJoistSpacingDim = dims[6];
+    const depth = HALF_PIPE_DEFAULTS.joistDepthMm / 1000;
+    const bottomTransitionY = HALF_PIPE_DEFAULTS.joistDepthMm / 1000;
+    const halfBottomTransition = HALF_PIPE_DEFAULTS.bottomTransitionLength / 2;
+    const curveJoists = curveInteriorJoistLocalPoints(HALF_PIPE_DEFAULTS);
+    // buildLinearDimension's offset here is purely in Z (offsetDir is (0,0,-1)), so the label's
+    // X/Y are exactly the midpoint of the two (unoffset) world points — no Z-offset math needed.
+    const [x0, y0] = joistCenter(curveJoists[0].point[0], curveJoists[0].point[1], depth, curveJoists[0].angle);
+    const [x1, y1] = joistCenter(curveJoists[1].point[0], curveJoists[1].point[1], depth, curveJoists[1].angle);
+    const expectedX = (-halfBottomTransition - x0 + (-halfBottomTransition - x1)) / 2;
+    const expectedY = (y0 + bottomTransitionY + (y1 + bottomTransitionY)) / 2;
+
+    expect(curveJoistSpacingDim.labelPosition.x).toBeCloseTo(expectedX, 6);
+    expect(curveJoistSpacingDim.labelPosition.y).toBeCloseTo(expectedY, 6);
   });
 
   it("omits the curve-joist spacing dimension when there are fewer than two interior curve joists to measure", () => {

@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { centerFootprint } from "./util";
 import { transitionAndDeckPoints } from "./transition";
 import { extrudeRibs, ribZPositions, RIB_THICKNESS_MM } from "./ribs";
-import { buildJoistBox, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
+import { buildJoistBox, joistCenter, JOIST_DEPTH_MM, JOIST_THICKNESS_MM } from "./joists";
 import { copingNotch } from "./coping";
 import { buildSkinCurveSheet, buildSkinFlatSheet, chooseFlatSheetLayout, curveSheetRows, staggeredZColumns, tileFromEdgeClipped, type FlatSheetLayout } from "./skin";
 
@@ -280,6 +280,25 @@ export function curveInteriorJoistLocalPoints(params: HalfPipeParams): { point: 
     const angle = curveStartAngle + ((curveEndAngle - curveStartAngle) * (i + 1)) / curveSegments;
     return { point: [radius * Math.sin(angle), radius * (1 - Math.cos(angle))] as [number, number], angle };
   });
+}
+
+/**
+ * Center-to-center chord distance between the first two interior curve joists, in meters —
+ * every curve-joist gap is congruent (equal angular steps on a circular arc, see
+ * `curveInteriorJoistLocalPoints`), so one representative gap stands in for all of them.
+ * Centers, not `curveInteriorJoistLocalPoints`' own anchor points — those anchor each joist's
+ * *top* face, not its center (see `joists.ts`), so they're translated back to the true
+ * centerline via `joistCenter` first. `undefined` when there are fewer than two interior curve
+ * joists to measure. Shared by the 3D view's curve-joist-spacing dimension
+ * (`halfPipeDimensions.ts`) and the 2D rib card's own label so neither drifts from the other.
+ */
+export function curveJoistSpacingMeters(params: HalfPipeParams): number | undefined {
+  const points = curveInteriorJoistLocalPoints(params);
+  if (points.length < 2) return undefined;
+  const depth = params.joistDepthMm / 1000;
+  const [x0, y0] = joistCenter(points[0].point[0], points[0].point[1], depth, points[0].angle);
+  const [x1, y1] = joistCenter(points[1].point[0], points[1].point[1], depth, points[1].angle);
+  return Math.hypot(x1 - x0, y1 - y0);
 }
 
 /**

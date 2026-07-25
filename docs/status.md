@@ -197,9 +197,12 @@ section bay) pair:
 - **Anchor**: `(x, y)` anchors the joist's *top* face, not its center — like
   a ceiling joist notched to a roofline, the top edge has to be coplanar
   with the rib curve at that point, with the joist's body hanging
-  below/behind it. `buildJoistBox` translates the box depth/2 back from
-  `(x, y)` along the tilted face's own normal `(-sin(angle), cos(angle))` to
-  compute the actual box center.
+  below/behind it. `joistCenter` (`joists.ts`) translates the box depth/2
+  back from `(x, y)` along the tilted face's own normal
+  `(-sin(angle), cos(angle))` to compute the actual box center;
+  `buildJoistBox` calls it internally, and it's exported so
+  `curveJoistSpacingMeters`/`halfPipeDimensions.ts` (below) can measure
+  true joist centers too, rather than the top-face anchor points.
 
 `buildHalfPipeJoists` (flat array, all landmarks) is a thin wrapper around
 `buildHalfPipeJoistsBySection`, which splits the same joists into `curveJoists`
@@ -417,15 +420,21 @@ measure it), all anchored to one edge rib since every rib is an identical copy o
   already covers that). Drawn on the ground, on the same +Z side as the bottom transition
   length dimension and chained off it (its start sits right next to the bottom transition's
   own edge), rather than at deck height on the opposite side.
-- **Curve-joist spacing** — chord (straight-line) distance between the anchor points of the
-  first two `internalCurveJoistCount` interior curve joists, reusing
-  `curveInteriorJoistLocalPoints` (extracted from `buildHalfPipeJoists` in
-  `src/ramps/halfPipe.ts` so both share the same angle math instead of duplicating it). Every
-  curve-joist gap is congruent — equal angular steps on a circular arc — so only the first
-  pair is dimensioned, same "one representative gap" convention as rib spacing above. Drawn at
-  the opposite edge (−Z) from the bottom transition/rib width dimensions, offset further
-  outward past the ramp. Omitted entirely when `internalCurveJoistCount` is below 2 (no pair
-  of interior joists to measure).
+- **Curve-joist spacing** — chord (straight-line) distance between the true *centers* of the
+  first two `internalCurveJoistCount` interior curve joists, via `halfPipe.ts`'s
+  `curveJoistSpacingMeters` — not `curveInteriorJoistLocalPoints`' own anchor points, which
+  anchor each joist's *top* face, not its center (see Joists' Anchor entry above); each anchor
+  point is translated back to its true center with `joistCenter` (`joists.ts`) first, since two
+  adjacent curve joists sit at different tangent angles and so offset by different amounts.
+  `curveInteriorJoistLocalPoints` (extracted from `buildHalfPipeJoists` in `src/ramps/halfPipe.ts`
+  so both share the same angle math instead of duplicating it) still supplies the raw anchor
+  points/angles `curveJoistSpacingMeters` and this dimension both build on. Every curve-joist gap
+  is congruent — equal angular steps on a circular arc — so only the first pair is dimensioned,
+  same "one representative gap" convention as rib spacing above. Drawn at the opposite edge (−Z)
+  from the bottom transition/rib width dimensions, offset further outward past the ramp. Omitted
+  entirely when `internalCurveJoistCount` is below 2 (no pair of interior joists to measure).
+  `curveJoistSpacingMeters` is shared with the 2D rib card (below) so neither drifts from the
+  other.
 
 `src/main.ts`'s `rebuildDimensions` rebuilds/disposes these the same way `rebuildRamp`
 already does for the rib group and coping, called after every param change.
@@ -479,6 +488,11 @@ separate from `src/dimensions/` (that module is 3D-only, Three.js `Vector3`/`Lin
     angular-dimension variant isn't built anywhere yet (see
     features.md), so hand-dimensioning the curve itself would be new scope, not reuse. Rib
     thickness (the extrusion depth, not drawable in a flat profile view) is a text label too.
+    Curve joist spacing (center-to-center, `halfPipe.ts`'s `curveJoistSpacingMeters` — see
+    Joists/Dimension lines above) is likewise a text label, not a drawn dimension line: unlike
+    the 3D view, which can place a dimension line anywhere in free space, a flat 2D rib profile
+    has no room to offset a line for an arbitrary-angle chord without new geometry work. Omitted
+    when `internalCurveJoistCount` is below 2, same as the 3D dimension.
   - **Deck board** — a length (`deckBoardLength`, also extracted from `halfPipe.ts`'s
     `buildHalfPipeDeck`) × width (`width`) rectangle, ribThicknessMm labeled.
   - **Joist** — length (one bay's own clear span, from `ribZPositions`' first pair — every

@@ -1,5 +1,32 @@
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { buildJoistBox } from "./joists";
+import { buildJoistBox, joistCenter } from "./joists";
+
+describe("joistCenter", () => {
+  it("translates depth/2 straight down from (x, y) when unrotated", () => {
+    expect(joistCenter(0.4, 0.6, 0.09)).toEqual([0.4, 0.6 - 0.045]);
+  });
+
+  it("translates along the tilted face's own normal at an arbitrary angle", () => {
+    const angle = Math.PI / 6;
+    const [cx, cy] = joistCenter(0.4, 0.6, 0.09, angle);
+    expect(cx).toBeCloseTo(0.4 + Math.sin(angle) * 0.045, 6);
+    expect(cy).toBeCloseTo(0.6 - Math.cos(angle) * 0.045, 6);
+  });
+
+  it("matches buildJoistBox's own center", () => {
+    const [x, y, depth, angle] = [0.4, 0.6, 0.09, Math.PI / 6];
+    const joist = buildJoistBox(1, 2.5, x, y, 0.045, depth, angle);
+    const center = new THREE.Vector3();
+    joist.computeBoundingBox();
+    joist.boundingBox!.getCenter(center);
+    const [cx, cy] = joistCenter(x, y, depth, angle);
+    // Z isn't checked — box.getCenter mixes in the rotated box's own Z extent asymmetry, X/Y are
+    // the axes joistCenter actually computes.
+    expect(center.x).toBeCloseTo(cx, 6);
+    expect(center.y).toBeCloseTo(cy, 6);
+  });
+});
 
 describe("buildJoistBox", () => {
   it("sizes the cross-section as thickness (X) x depth (Y), spanning zStart to zEnd", () => {
