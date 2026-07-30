@@ -182,9 +182,12 @@ sun.position.set(-6, 8, 4);
 sun.castShadow = true;
 scene.add(ambient, sun);
 
+// polygonOffset pushes the ground's rasterized depth back slightly (no vertex movement) so
+// coplanar geometry at true y=0 — the dimension lines below — renders cleanly on top instead of
+// z-fighting, without needing to lift those lines off their real position to fake the fix.
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(30, 30),
-  new THREE.MeshStandardMaterial({ color: 0x6b8f5a, flatShading: true }),
+  new THREE.MeshStandardMaterial({ color: 0x6b8f5a, flatShading: true, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }),
 );
 ground.rotation.x = -Math.PI / 2;
 ground.receiveShadow = true;
@@ -265,11 +268,13 @@ function rebuildCoping(params: HalfPipeParams, width: number): void {
 }
 
 const dimensionsGroup = new THREE.Group();
-dimensionsGroup.position.y = 0.01; // lifted off the ground plane to avoid z-fighting with it
 scene.add(dimensionsGroup);
 
 const LABEL_FONT_PX = 48;
-const LABEL_WORLD_HEIGHT = 0.25; // meters
+// Target on-screen text height in pixels — with sizeAttenuation:false (see createLabelSprite)
+// the sprite's screen size no longer depends on camera distance, so this is a real pixel size,
+// not a world size.
+const LABEL_PIXEL_HEIGHT = 28;
 
 /** A camera-facing text billboard drawn on a canvas texture — always in-scene, redrawn every frame with the rest of the WebGL canvas, so there's no separate DOM overlay that can get out of sync. */
 function createLabelSprite(text: string): THREE.Sprite {
@@ -288,8 +293,13 @@ function createLabelSprite(text: string): THREE.Sprite {
   ctx.fillText(text, paddingX, canvas.height / 2);
 
   const texture = new THREE.CanvasTexture(canvas);
-  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
-  sprite.scale.set((LABEL_WORLD_HEIGHT * canvas.width) / canvas.height, LABEL_WORLD_HEIGHT, 1);
+  // sizeAttenuation:false keeps the sprite's on-screen size constant regardless of camera
+  // distance (three.js's own vertex shader cancels distance out of the projected size when this
+  // is off — see sprite.glsl.js) — the label shouldn't grow as the camera dollies in.
+  const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false, sizeAttenuation: false }));
+  const vFov = THREE.MathUtils.degToRad(camera.fov);
+  const labelHeight = (LABEL_PIXEL_HEIGHT * 2 * Math.tan(vFov / 2)) / viewport.clientHeight;
+  sprite.scale.set((labelHeight * canvas.width) / canvas.height, labelHeight, 1);
   return sprite;
 }
 
