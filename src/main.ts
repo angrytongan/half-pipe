@@ -1,3 +1,4 @@
+import "./style.css";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import {
@@ -402,10 +403,10 @@ function rebuildPartDrawings(params: HalfPipeParams): void {
 /** Rebuilds the "Bill of materials" tab: one row per part type (see construction/halfPipeBom.ts) — cheap enough to redo on every param change, tab visible or not, same as rebuildPartDrawings. */
 function rebuildBom(params: HalfPipeParams): void {
   const rows = calculateHalfPipeBom(params)
-    .map((line) => `<tr><td>${line.part}</td><td class="bom-qty">${line.quantity}</td><td>${line.dimensions}</td><td>${line.material}</td></tr>`)
+    .map((line) => `<tr><td>${line.part}</td><td class="tabular-nums">${line.quantity}</td><td>${line.dimensions}</td><td>${line.material}</td></tr>`)
     .join("");
   bomContainerEl.innerHTML = `
-    <table id="bom-table">
+    <table class="table table-sm">
       <thead><tr><th>Part</th><th>Qty</th><th>Dimensions</th><th>Material</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
@@ -529,7 +530,7 @@ function renderSpaceStatus(): void {
     const avail = round2(availableSpace[key]);
     const fits = req <= avail;
     const detail = fits ? `${req.toFixed(2)}m / ${avail.toFixed(2)}m` : `${req.toFixed(2)}m / ${avail.toFixed(2)}m — over by ${(req - avail).toFixed(2)}m`;
-    return `<div class="space-status ${fits ? "safe" : "unsafe"}">${label}: ${detail}</div>`;
+    return `<div class="badge badge-sm badge-soft ${fits ? "badge-success" : "badge-error"} tabular-nums">${label}: ${detail}</div>`;
   }).join("");
   // Called both directly (available-space sliders) and from the end of rebuildRamp (every other
   // slider, plus undo/redo/reset) — one hook here persists both without a second call site.
@@ -653,6 +654,7 @@ function renderSliderList(container: HTMLElement, specs: SliderSpec[], state: Re
 
     const input = document.createElement("input");
     input.type = "range";
+    input.className = "range range-xs w-full";
     input.min = String(spec.min);
     input.max = String(spec.max);
     input.step = String(spec.step);
@@ -817,6 +819,7 @@ for (const tabButton of tabButtons) {
     for (const btn of tabButtons) {
       const selected = btn === tabButton;
       btn.setAttribute("aria-selected", String(selected));
+      btn.classList.toggle("tab-active", selected); // daisyUI styles the active tab off this class, not aria-selected
       document.getElementById(btn.getAttribute("aria-controls")!)!.hidden = !selected;
     }
   });
