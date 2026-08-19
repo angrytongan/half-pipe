@@ -21,7 +21,8 @@ npm run typecheck   # type-check
 
 ## Stack
 
-Vite + TypeScript + Three.js, no framework, no backend. `src/ramps/` holds
+Vite + TypeScript + Three.js, no framework, no backend; styling is Tailwind 4
++ daisyUI 5 (`src/style.css`). `src/ramps/` holds
 pure geometry builders (`halfPipe.ts`, a parametric `THREE.BufferGeometry`
 centered on its own footprint, using transition-curve math from
 `src/ramps/transition.ts`); `src/main.ts` wires up the scene, camera,

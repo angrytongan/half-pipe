@@ -21,7 +21,10 @@ there and describe it in [docs/status.md](docs/status.md) instead.
 ## Stack
 
 Vite + TypeScript + Three.js, no framework, no backend, Vitest, ESLint (flat
-config, `typescript-eslint` recommended). `npm run dev` / `build` / `test` /
+config, `typescript-eslint` recommended). Styling is Tailwind 4 + daisyUI 5
+via `@tailwindcss/vite`, entry point `src/style.css` (imported from
+`main.ts`) — see [docs/status.md](docs/status.md)'s Styling section for what's
+daisyUI and what's still hand-written CSS. `npm run dev` / `build` / `test` /
 `lint` / `typecheck`.
 
 ## Status

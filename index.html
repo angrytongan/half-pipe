@@ -20,490 +20,25 @@
         document.documentElement.dataset.theme = theme;
       })();
     </script>
-    <style>
-      :root {
-        color-scheme: light dark;
-        font-family: system-ui, sans-serif;
-        --bg: #ffffff;
-        --text: #1a1a1a;
-        --border: #8884;
-        --card-bg: #f5f5f5;
-        --shadow: 0 1px 4px #0003;
-        --pill-bg: #cf222e1a;
-        --pill-color: #cf222e;
-        --pill-border: #cf222e55;
-        --safe-bg: #1a7f371a;
-        --safe-color: #1a7f37;
-        --unsafe-bg: #cf222e1a;
-        --unsafe-color: #cf222e;
-      }
-      :root[data-theme="light"] {
-        color-scheme: light;
-      }
-      :root[data-theme="dark"] {
-        color-scheme: dark;
-        --bg: #1a1a1a;
-        --text: #e8e8e8;
-        --border: #ffffff26;
-        --card-bg: #262626;
-        --shadow: 0 1px 4px #0006;
-      }
-      body {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-        background: var(--bg);
-        color: var(--text);
-      }
-      .app-header {
-        flex-shrink: 0;
-        display: flex;
-        align-items: center;
-        gap: 0.6rem;
-        padding: 0.6rem 1rem;
-        border-bottom: 1px solid var(--border);
-      }
-      .app-header .icon-skate {
-        font-size: 1.3rem;
-        line-height: 1;
-      }
-      .app-header .app-title {
-        font-weight: 700;
-        font-size: 1rem;
-      }
-      .app-header .spacer {
-        flex: 1;
-      }
-      .app-header .pill {
-        background: var(--pill-bg);
-        color: var(--pill-color);
-        border: 1px solid var(--pill-border);
-        border-radius: 999px;
-        padding: 0.15rem 0.6rem;
-        font-size: 0.75rem;
-        white-space: nowrap;
-      }
-      .app-header .icon-link {
-        display: flex;
-        color: inherit;
-        opacity: 0.75;
-      }
-      .app-header .icon-link:hover {
-        opacity: 1;
-      }
-      #theme-toggle,
-      #about-btn {
-        background: none;
-        border: none;
-        padding: 0;
-        font-size: 1.1rem;
-        line-height: 1;
-        cursor: pointer;
-      }
-      #about-modal {
-        max-width: 24rem;
-        border: 1px solid var(--border);
-        border-radius: 10px;
-        background: var(--card-bg);
-        color: var(--text);
-        box-shadow: var(--shadow);
-        padding: 1.2rem;
-      }
-      #about-modal::backdrop {
-        background: #0006;
-      }
-      #about-modal h2 {
-        margin-top: 0;
-      }
-      #about-modal .close-row {
-        text-align: right;
-        margin-top: 1rem;
-      }
-      .app {
-        flex: 1;
-        min-height: 0;
-        display: flex;
-        gap: 1rem;
-        padding: 1rem;
-        box-sizing: border-box;
-      }
-      .card {
-        border-radius: 10px;
-        border: 1px solid var(--border);
-        background: var(--card-bg);
-        box-shadow: var(--shadow);
-      }
-      #panel {
-        width: 260px;
-        flex-shrink: 0;
-        padding: 1rem;
-        box-sizing: border-box;
-        overflow-y: auto;
-      }
-      .toggle-row {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.85rem;
-        margin-bottom: 0.9rem;
-        cursor: pointer;
-      }
-      .toggle-row .toggle-label {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.3rem;
-      }
-      .tooltip-wrap {
-        display: inline-flex;
-      }
-      .tooltip-trigger {
-        display: inline-flex;
-        font-size: 1rem;
-        opacity: 0.75;
-        cursor: help;
-      }
-      .tooltip-trigger:hover,
-      .tooltip-trigger:focus {
-        opacity: 1;
-      }
-      /* position: fixed (not absolute) so it isn't clipped by #panel's overflow-y: auto — left/top are set from JS to track .tooltip-trigger's position */
-      .tooltip-bubble {
-        position: fixed;
-        top: 0;
-        left: 0;
-        transform: translate(-50%, calc(-100% - 8px));
-        width: max-content;
-        max-width: 11rem;
-        white-space: normal;
-        background: var(--text);
-        color: var(--bg);
-        padding: 0.4rem 0.6rem;
-        border-radius: 6px;
-        font-size: 0.75rem;
-        font-weight: 400;
-        line-height: 1.3;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.1s;
-        z-index: 10;
-      }
-      .tooltip-trigger:hover + .tooltip-bubble,
-      .tooltip-trigger:focus + .tooltip-bubble {
-        opacity: 1;
-      }
-      .slider-row {
-        margin-bottom: 0.9rem;
-      }
-      .slider-row label {
-        display: flex;
-        justify-content: space-between;
-        font-size: 0.85rem;
-        margin-bottom: 0.25rem;
-      }
-      .slider-row input[type="range"] {
-        width: 100%;
-      }
-      #reset-btn,
-      #reset-view-btn {
-        width: 100%;
-        padding: 0.4rem;
-        margin-bottom: 1rem;
-        cursor: pointer;
-      }
-      .history-buttons {
-        display: flex;
-        gap: 0.5rem;
-        margin-bottom: 1rem;
-      }
-      .history-buttons button {
-        flex: 1;
-        padding: 0.4rem;
-        cursor: pointer;
-      }
-      .history-buttons button:disabled {
-        opacity: 0.5;
-        cursor: default;
-      }
-      #panel details {
-        padding: 0.75rem 0;
-        border-bottom: 1px solid var(--border);
-      }
-      #panel details:last-of-type {
-        border-bottom: none;
-      }
-      #panel summary {
-        font-size: 0.85rem;
-        font-weight: 600;
-        cursor: pointer;
-      }
-      #panel details[open] summary {
-        margin-bottom: 0.75rem;
-      }
-      .subsection-label {
-        font-size: 0.75rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        opacity: 0.6;
-        margin: 0.75rem 0 0.5rem;
-      }
-      .subsection-label:first-child {
-        margin-top: 0;
-      }
-      #space-status {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.3rem;
-        max-width: 12rem;
-      }
-      .space-status {
-        padding: 0.15rem 0.5rem;
-        border-radius: 999px;
-        font-size: 0.75rem;
-        font-variant-numeric: tabular-nums;
-      }
-      .space-status.safe {
-        background: var(--safe-bg);
-        color: var(--safe-color);
-      }
-      .space-status.unsafe {
-        background: var(--unsafe-bg);
-        color: var(--unsafe-color);
-      }
-      .main-tabs {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden; /* clips tab-panel content (e.g. the canvas) to the card's rounded corners */
-      }
-      .tab-bar {
-        flex-shrink: 0;
-        display: flex;
-        border-bottom: 1px solid var(--border);
-      }
-      .tab-btn {
-        background: none;
-        border: none;
-        padding: 0.6rem 1rem;
-        font: inherit;
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: var(--text);
-        opacity: 0.6;
-        cursor: pointer;
-        border-bottom: 2px solid transparent;
-      }
-      .tab-btn[aria-selected="true"] {
-        opacity: 1;
-        border-bottom-color: var(--text);
-      }
-      .tab-panel {
-        flex: 1;
-        min-height: 0;
-        position: relative;
-      }
-      #viewport canvas {
-        display: block;
-      }
-      #bom-container {
-        position: absolute;
-        inset: 0;
-        overflow: auto;
-        padding: 1.5rem;
-        box-sizing: border-box;
-      }
-      #bom-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.9rem;
-      }
-      #bom-table th,
-      #bom-table td {
-        text-align: left;
-        padding: 0.5rem 0.75rem;
-        border-bottom: 1px solid var(--border);
-      }
-      #bom-table th {
-        font-size: 0.75rem;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
-        opacity: 0.6;
-      }
-      #bom-table td.bom-qty {
-        font-variant-numeric: tabular-nums;
-      }
-      .bom-disclaimer {
-        margin-top: 1rem;
-        font-size: 0.8rem;
-        opacity: 0.7;
-        font-style: italic;
-      }
-      #drawings-list {
-        position: absolute;
-        inset: 0;
-        overflow: auto;
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr));
-        gap: 1.5rem;
-        padding: 1.5rem;
-        box-sizing: border-box;
-        align-content: start;
-      }
-      .drawing-card h3 {
-        margin: 0 0 0.5rem;
-        font-size: 1rem;
-      }
-      .drawing-card svg {
-        width: 100%;
-        aspect-ratio: 1;
-        background: var(--bg);
-        border: 1px solid var(--border);
-        border-radius: 6px;
-      }
-      .part-outline {
-        fill: none;
-        stroke: var(--text);
-        stroke-width: 1.5px;
-        vector-effect: non-scaling-stroke;
-      }
-      .dim-extension,
-      .dim-line {
-        stroke: var(--pill-color);
-        stroke-width: 1px;
-        vector-effect: non-scaling-stroke;
-      }
-      .dim-arrow {
-        fill: var(--pill-color);
-      }
-      .dim-label,
-      .part-note {
-        fill: var(--text);
-        text-anchor: middle;
-        dominant-baseline: middle;
-      }
-      .overlay-card {
-        position: absolute;
-        top: 1rem;
-        left: 1rem;
-        padding: 0.6rem 0.8rem;
-        z-index: 1;
-      }
-      /* Only the active tab's content is meant to leave the browser: the header, sliders panel,
-         and tab bar are on-screen chrome with nothing to print (hidden here regardless of which
-         tab is active), and each tab-panel's own layout below is positioned/sized for a screen
-         viewport, not a page flow that a printer can paginate across multiple sheets. The
-         inactive tab-panels are already `hidden` by main.ts's tab switching, so only the visible
-         one ever reaches this stylesheet. Placed last in the stylesheet (after .part-outline,
-         .dim-*, and .drawing-card h3's own unconditional rules) so it actually wins the
-         cascade at equal specificity — an earlier position lost to those later, non-media-queried
-         rules even while printing. CAUTION: this comment must never contain the literal
-         sequence "*" followed immediately by "/" — that closes the comment early and silently
-         voids this entire @media print block (verified: this bug shipped for a while before
-         being caught). */
-      @media print {
-        .app-header,
-        #panel,
-        .tab-bar {
-          display: none;
-        }
-        body,
-        .app,
-        .main-tabs {
-          height: auto;
-          overflow: visible;
-        }
-        .app {
-          display: block;
-          padding: 0;
-        }
-        .main-tabs {
-          border: none;
-          box-shadow: none;
-        }
-        /* three.js sets the canvas's width/height as inline styles sized for the screen
-           viewport — !important is needed to win over those for the printed page. */
-        #viewport canvas {
-          width: 100% !important;
-          height: auto !important;
-        }
-        /* Same on-screen positioning (absolute, inset: 0, clipped to the scrolling container)
-           as #drawings-list had before its own print fix — without this, the table would be
-           clipped to whatever fit the screen viewport instead of flowing across pages. */
-        #bom-container {
-          position: static;
-          overflow: visible;
-          padding: 0;
-        }
-        /* display: block (not grid) — print/page fragmentation (break-inside, break-after)
-           inside a CSS Grid container is inconsistently supported across browsers (Safari's
-           print engine especially), and no amount of tuning row/gap sizing on top of it fixed
-           the drift seen here card after card. Plain block flow is the best-supported
-           fragmentation context, so the print path drops the grid entirely instead of trying
-           to make one work. */
-        #drawings-list {
-          display: block;
-          position: static;
-          overflow: visible;
-          padding: 0;
-        }
-        /* Deliberately not sized to fill the page (no vh/height math): a fixed vh height on the
-           card or svg assumes `vh` in print equals the printable area, but that area is the
-           paper size minus the browser's own print margins — a mismatch there oversizes every
-           card by the same fixed amount, and that error compounds page after page, drifting
-           each successive card further down until one crosses a page break. Sizing the svg at
-           its natural on-screen width/aspect-ratio instead sidesteps needing to know the
-           printable area's exact height at all — break-inside/break-after below are the only
-           things doing pagination work. Legacy page-break-* properties alongside the modern
-           break-* ones since older print-engine code paths (still exercised by some browsers'
-           print preview) key off those instead. */
-        .drawing-card {
-          break-inside: avoid;
-          page-break-inside: avoid;
-        }
-        .drawing-card:not(:last-child) {
-          break-after: page;
-          page-break-after: always;
-        }
-        .drawing-card svg {
-          border: none;
-          background: #fff;
-        }
-        /* Printed drawings need to read as plain black-on-white regardless of the app's own
-           theme colors (--text/--pill-color can be light in dark mode, or a non-black tint in
-           light mode) — paper has no dark mode. */
-        .drawing-card h3 {
-          color: #000;
-        }
-        .part-outline,
-        .dim-extension,
-        .dim-line {
-          stroke: #000;
-        }
-        .dim-arrow,
-        .dim-label,
-        .part-note {
-          fill: #000;
-        }
-      }
-    </style>
   </head>
-  <body>
-    <header class="app-header">
-      <span class="icon-skate" role="img" aria-label="Person skateboarding">🛹</span>
-      <span class="app-title">half-pipe</span>
-      <button type="button" id="about-btn" class="icon-link" aria-label="About this app">ⓘ</button>
-      <div class="spacer"></div>
-      <span class="pill">in development</span>
-      <button type="button" id="theme-toggle" class="icon-link" aria-label="Toggle dark mode"></button>
+  <body class="bg-base-100 text-base-content">
+    <header class="app-header flex shrink-0 items-center gap-2.5 border-b border-base-300 px-4 py-2">
+      <span class="icon-skate text-xl leading-none" role="img" aria-label="Person skateboarding">🛹</span>
+      <span class="font-bold">half-pipe</span>
+      <button type="button" id="about-btn" class="btn btn-ghost btn-xs btn-circle" aria-label="About this app">
+        ⓘ
+      </button>
+      <div class="flex-1"></div>
+      <span class="badge badge-error badge-soft badge-sm whitespace-nowrap">in development</span>
+      <button type="button" id="theme-toggle" class="btn btn-ghost btn-xs btn-circle" aria-label="Toggle dark mode"></button>
       <a
-        class="icon-link"
+        class="btn btn-ghost btn-xs btn-circle"
         href="https://github.com/angrytongan/half-pipe"
         target="_blank"
         rel="noopener noreferrer"
         aria-label="GitHub repository"
       >
-        <svg viewBox="0 0 16 16" width="20" height="20" fill="currentColor" aria-hidden="true">
+        <svg viewBox="0 0 16 16" width="18" height="18" fill="currentColor" aria-hidden="true">
           <path
             fill-rule="evenodd"
             clip-rule="evenodd"
@@ -512,24 +47,28 @@
         </svg>
       </a>
     </header>
-    <dialog id="about-modal">
-      <h2>half-pipe</h2>
-      <p>
-        A browser tool for planning skateboard half-pipe builds — adjust its parameters via sliders and see the 3D
-        shape update live. Standalone: no terrain, no saved projects, just geometry.
-      </p>
-      <div class="close-row">
-        <button type="button" id="about-close-btn">Close</button>
+    <dialog id="about-modal" class="modal">
+      <div class="modal-box max-w-sm">
+        <h2 class="text-lg font-bold">half-pipe</h2>
+        <p class="py-4">
+          A browser tool for planning skateboard half-pipe builds — adjust its parameters via sliders and see the 3D
+          shape update live. Standalone: no terrain, no saved projects, just geometry.
+        </p>
+        <div class="modal-action">
+          <button type="button" id="about-close-btn" class="btn btn-sm">Close</button>
+        </div>
       </div>
     </dialog>
     <div class="app">
-      <div id="panel" class="card">
+      <div id="panel" class="card border border-base-300 bg-base-200 shadow-sm">
         <div class="history-buttons">
-          <button type="button" id="undo-btn" disabled>Undo</button>
-          <button type="button" id="redo-btn" disabled>Redo</button>
+          <button type="button" id="undo-btn" class="btn btn-sm flex-1" disabled>Undo</button>
+          <button type="button" id="redo-btn" class="btn btn-sm flex-1" disabled>Redo</button>
         </div>
-        <button type="button" id="reset-view-btn">Reset view</button>
-        <label class="toggle-row">Show dimensions<input type="checkbox" id="dimensions-toggle" checked /></label>
+        <button type="button" id="reset-view-btn" class="btn btn-sm mb-4 w-full">Reset view</button>
+        <label class="toggle-row"
+          >Show dimensions<input type="checkbox" id="dimensions-toggle" class="toggle toggle-sm" checked
+        /></label>
         <div class="toggle-row">
           <span class="toggle-label">
             <label for="scale-toggle">Show scale</label>
@@ -540,10 +79,14 @@
               >
             </span>
           </span>
-          <input type="checkbox" id="scale-toggle" checked />
+          <input type="checkbox" id="scale-toggle" class="toggle toggle-sm" checked />
         </div>
-        <label class="toggle-row">Show layer 1<input type="checkbox" id="skin-layer1-toggle" /></label>
-        <label class="toggle-row">Show layer 2<input type="checkbox" id="skin-layer2-toggle" /></label>
+        <label class="toggle-row"
+          >Show layer 1<input type="checkbox" id="skin-layer1-toggle" class="toggle toggle-sm"
+        /></label>
+        <label class="toggle-row"
+          >Show layer 2<input type="checkbox" id="skin-layer2-toggle" class="toggle toggle-sm"
+        /></label>
         <details>
           <summary>Available space</summary>
           <div id="space-sliders"></div>
@@ -576,28 +119,28 @@
           <div id="skin-layer2-sliders"></div>
           <label class="toggle-row"
             >Grain direction
-            <select id="skin-grain-direction" disabled>
+            <select id="skin-grain-direction" class="select select-sm w-32" disabled>
               <option value="length-ways">Length-ways</option>
               <option value="width-ways">Width-ways</option>
             </select>
           </label>
         </details>
-        <button type="button" id="reset-btn">Reset to defaults</button>
+        <button type="button" id="reset-btn" class="btn btn-sm mb-4 w-full">Reset to defaults</button>
       </div>
-      <div class="main-tabs card">
-        <div class="tab-bar" role="tablist">
-          <button type="button" class="tab-btn" role="tab" aria-selected="true" aria-controls="viewport">
+      <div class="main-tabs card border border-base-300 bg-base-200 shadow-sm">
+        <div class="tab-bar tabs tabs-border" role="tablist">
+          <button type="button" class="tab-btn tab tab-active" role="tab" aria-selected="true" aria-controls="viewport">
             3D view
           </button>
-          <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-drawings">
+          <button type="button" class="tab-btn tab" role="tab" aria-selected="false" aria-controls="tab-drawings">
             2D drawings
           </button>
-          <button type="button" class="tab-btn" role="tab" aria-selected="false" aria-controls="tab-bom">
+          <button type="button" class="tab-btn tab" role="tab" aria-selected="false" aria-controls="tab-bom">
             Bill of materials
           </button>
         </div>
         <div id="viewport" class="tab-panel" role="tabpanel">
-          <div id="space-status" class="card overlay-card"></div>
+          <div id="space-status" class="card overlay-card border border-base-300 bg-base-200 shadow-sm"></div>
         </div>
         <div id="tab-drawings" class="tab-panel" role="tabpanel" hidden>
           <div id="drawings-list"></div>

@@ -687,21 +687,53 @@ features.md.
 
 **Dark/light mode**: a `#theme-toggle` button in the header (next to the GitHub link, 🌙/☀️
 glyph swapped by `renderThemeToggle` in `src/main.ts`) flips `document.documentElement.dataset.theme`
-between `"light"`/`"dark"` and persists the choice to `localStorage`. All chrome colors
-(`--bg`, `--text`, `--border`, `--card-bg`, `--shadow`, plus the pill/space-status tint
-variables) are CSS custom properties on `:root`, overridden by `:root[data-theme="light"]`/
-`:root[data-theme="dark"]` blocks in `index.html` — no `prefers-color-scheme` media query in
-CSS, since a small inline `<script>` in `<head>` (runs before first paint, so no flash) resolves
-the initial theme once: `localStorage`'s stored value if present, else the system
-`prefers-color-scheme`. Both `[data-theme]` blocks also pin `color-scheme` explicitly (`light`/
-`dark`) rather than leaving it at `:root`'s base `light dark` — native form controls (buttons,
-checkboxes, range sliders, `<details>` markers) follow `color-scheme` themselves, so without an
-explicit per-theme value they'd keep following the OS preference even after the in-app toggle
-overrides it, showing dark-mode chrome on a light-themed page (or vice versa) whenever the OS
-setting disagreed with the chosen theme. The 3D viewport itself (sky/ground background,
+between `"light"`/`"dark"` and persists the choice to `localStorage`. `data-theme` on `<html>`
+is daisyUI's own theming hook, so the toggle needed no change when daisyUI landed (see Styling
+below): `src/style.css` enables daisyUI's stock `light` and `dark` themes and daisyUI supplies
+every chrome color as `--color-base-100`/`--color-base-content`/etc. per theme, including the
+`color-scheme` each one pins — which matters because native form controls (`<details>` markers,
+the `<select>`) follow `color-scheme` themselves and would otherwise keep tracking the OS
+preference after the in-app toggle overrode it. A small inline `<script>` in `<head>` (runs
+before first paint, so no flash) still resolves the initial theme once: `localStorage`'s stored
+value if present, else the system `prefers-color-scheme`. The 3D viewport itself (sky/ground background,
 ramp/joist/coping materials, dimension line/label
 colors) is unthemed — those represent a fixed outdoor daylight scene and physical materials,
 not app chrome.
+
+## Styling
+
+Tailwind 4 + daisyUI 5, wired through `@tailwindcss/vite` in `vite.config.ts`. The entry point
+is `src/style.css`, imported for its side effect at the top of `src/main.ts` (`src/vite-env.d.ts`
+carries the `/// <reference types="vite/client" />` that makes TypeScript accept a CSS import).
+`index.html` has no `<style>` block anymore — only the inline theme `<script>` in `<head>`.
+
+**Split of responsibility.** daisyUI owns the component chrome, as classes written directly into
+the markup: `btn`/`btn-sm`/`btn-ghost btn-xs btn-circle` (panel buttons, header icons),
+`card`, `tabs tabs-border` + `tab`, `modal` + `modal-box` (the about dialog), `badge` (the
+"in development" pill, and the space-status pills built in `renderSpaceStatus`), `toggle`,
+`select`, `range range-xs` (set on each slider in `renderSliderList`), and `table table-sm`
+(the BOM). The rest of `src/style.css` is hand-written CSS for what daisyUI has no component
+for: the app's flex layout (`body`, `.app`, `#panel`, `.main-tabs`, `.tab-panel`), the
+`.tooltip-bubble` fixed-position hack, `#drawings-list`'s grid, the `.part-outline`/`.dim-*` SVG
+drawing styles, and the whole `@media print` block (see Printing below). That hand-written CSS
+is deliberately *unlayered*, so it wins the cascade over daisyUI's `@layer components` and
+Tailwind's `@layer utilities` without needing `!important`.
+
+Two seams worth knowing:
+
+- **`@source "../index.html"`** at the top of `src/style.css`. Tailwind 4's automatic source
+  detection roots at the CSS file's own directory (`src/`), which would miss `index.html` —
+  where most of the daisyUI classes live — and silently tree-shake every one of those classes
+  out of the build.
+- **`.tab-active`**. The tab-switching code in `src/main.ts` drives `aria-selected`, but daisyUI
+  styles the active tab off a `.tab-active` class, so the same loop toggles both. The elements
+  also keep their original `.tab-btn`/`.tab-bar`/`.drawing-card`/`.overlay-card` classes
+  alongside the daisyUI ones — those are what `src/main.ts`'s `querySelectorAll` and the print
+  block still select on.
+
+The two SVG-facing custom properties, `--text` and `--pill-color`, survive as thin aliases onto
+`--color-base-content` and `--color-error` at `:root`, so the drawing styles follow the active
+daisyUI theme without restating a palette.
 
 ## Undo/redo
 
@@ -806,7 +838,7 @@ too, since Node 20 itself reached end-of-life.
 ## Printing
 
 No print button or PDF export — this is the browser's native print (Cmd/Ctrl+P), styled by
-`index.html`'s `@media print` block. Whichever tab is currently active is what prints; the other
+`src/style.css`'s `@media print` block. Whichever tab is currently active is what prints; the other
 two tab-panels are already `hidden` by the tab-switching code in `src/main.ts`, and the print
 block unconditionally hides the app header, sliders panel, and tab bar on top of that — so the
 printed page is just that one tab's content, nothing else.
